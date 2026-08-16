@@ -17,43 +17,23 @@ report_mock.py — 리포트 출력 형식(§3/§5/§6) 검증용 목업 데이�
 
 import random
 
-# ── 공통 지표 스키마 (§8-1) ──────────────────────────────────
+# ── 공통 지표 스키마 (§8-1, 데이터 소스 제약 반영 12개로 조정) ──
 METRIC_SCHEMA = [
     ("밸류에이션", "PER", "배"),
     ("밸류에이션", "PBR", "배"),
     ("밸류에이션", "PSR", "배"),
-    ("밸류에이션", "EV/EBITDA", "배"),
     ("밸류에이션", "배당수익률", "%"),
     ("수익성", "ROE", "%"),
-    ("수익성", "ROA", "%"),
     ("수익성", "영업이익률", "%"),
     ("수익성", "순이익률", "%"),
     ("건전성", "부채비율", "%"),
-    ("건전성", "유동비율", "%"),
-    ("건전성", "이자보상배율", "배"),
+    ("건전성", "유보율", "%"),
     ("성장성", "매출YoY", "%"),
     ("성장성", "영업이익YoY", "%"),
     ("성장성", "EPS YoY", "%"),
-    ("현금흐름", "FCF", "억원"),
-    ("현금흐름", "FCF Yield", "%"),
 ]
 
 
-def _mock_value(metric_name: str) -> float:
-    """지표 성격에 맞는 대략적인 범위로 랜덤값 생성 (레이아웃 검증용)"""
-    if metric_name in ("PER", "EV/EBITDA", "이자보상배율"):
-        return round(random.uniform(5, 30), 1)
-    if metric_name in ("PBR", "PSR"):
-        return round(random.uniform(0.5, 5), 2)
-    if metric_name == "유동비율":
-        return round(random.uniform(80, 250), 1)
-    if metric_name == "부채비율":
-        return round(random.uniform(20, 150), 1)
-    if metric_name == "FCF":
-        return round(random.uniform(-500, 5000), 0)
-    if "YoY" in metric_name or metric_name == "FCF Yield":
-        return round(random.uniform(-10, 25), 1)
-    return round(random.uniform(0, 25), 1)  # ROE, ROA, 마진율, 배당수익률 등
 
 
 # ── N=1 정적 분석: 종목 vs 섹터 vs 지수 (§3) ────────────────────
