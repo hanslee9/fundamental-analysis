@@ -187,11 +187,25 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 else:
                     target_col = data_cols[-1] if data_cols else None
 
-                def _row_value(label_keyword: str):
+                # 직전 연간 컬럼 (YoY 계산용) — annual_actual_cols에서 target_col 바로 이전 것
+                prev_annual_col = annual_actual_cols[-2] if len(annual_actual_cols) >= 2 else None
+
+                def _row_value(label_keyword: str, col=None):
+                    col = col or target_col
                     row = perf_table[perf_table.iloc[:, 0].astype(str).str.contains(label_keyword, na=False)]
-                    if row.empty or target_col is None:
+                    if row.empty or col is None:
                         return None
-                    return _parse_float(str(row.iloc[0][target_col]))
+                    return _parse_float(str(row.iloc[0][col]))
+
+                def _yoy(label_keyword: str):
+                    """직전 연간 대비 증가율(%) 계산. 데이터 부족하면 None"""
+                    if prev_annual_col is None:
+                        return None
+                    cur = _row_value(label_keyword, target_col)
+                    prev = _row_value(label_keyword, prev_annual_col)
+                    if cur is None or prev is None or prev == 0:
+                        return None
+                    return round((cur - prev) / abs(prev) * 100, 1)
 
                 snap.roe = _row_value("ROE")
                 snap.roa = _row_value("ROA")
@@ -199,20 +213,18 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 snap.net_margin = _row_value("순이익률")
                 snap.debt_ratio = _row_value("부채비율")
 
+                # 성장성 (§8-1) — 연간 vs 직전 연간 비교
+                snap.revenue_yoy = _yoy("매출액")
+                snap.operating_income_yoy = _yoy("영업이익")
+                snap.eps_yoy = _yoy("EPS")
+
                 # PSR = 시가총액 / 매출액 (매출액은 억원 단위, 시가총액도 억원 단위로 환산해서 계산)
                 revenue = _row_value("매출액")
                 market_cap = self._parse_market_cap_eok(soup)
-                debug_msg = f"기준컬럼={target_col}, 매출액={revenue}억원, 시가총액={market_cap}억원"
                 if revenue and market_cap and revenue != 0:
                     snap.psr = round(market_cap / revenue, 2)
-                    snap.flags["psr_debug"] = debug_msg  # 성공해도 검증용으로 항상 표시
-                else:
-                    if revenue is None:
-                        snap.flags["psr_debug"] = f"매출액 파싱 실패 ({debug_msg})"
-                    elif market_cap is None:
-                        snap.flags["psr_debug"] = f"시가총액 파싱 실패 ({debug_msg})"
-            except Exception as e:
-                snap.flags["psr_debug"] = f"PSR 계산 중 예외: {e}"
+            except Exception:
+                pass  # 표 구조가 예상과 다르면 해당 필드는 N/A로 남김
 
         pending_items = []
         if snap.psr is None:
