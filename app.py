@@ -136,7 +136,8 @@ if mode == "N=1 단일 종목":
             ("영업이익률(%)", snap.operating_margin), ("순이익률(%)", snap.net_margin),
             ("부채비율", snap.debt_ratio), ("유동비율", snap.current_ratio),
             ("이자보상배율", snap.interest_coverage),
-            ("매출YoY(%)", None), ("영업이익YoY(%)", None), ("EPS YoY(%)", None),
+            ("매출YoY(%)", snap.revenue_yoy), ("영업이익YoY(%)", snap.operating_income_yoy),
+            ("EPS YoY(%)", snap.eps_yoy),
             ("FCF(억원)", snap.fcf), ("FCF Yield(%)", snap.fcf_yield),
         ]
         cols = st.columns(5)
@@ -145,8 +146,6 @@ if mode == "N=1 단일 종목":
                 st.metric(label, f"{value:.2f}" if value is not None else "N/A")
         if snap.flags.get("_pending"):
             st.caption(f"⚠ {snap.flags['_pending']}")
-        if snap.flags.get("psr_debug"):
-            st.caption(f"🔍 PSR 디버그: {snap.flags['psr_debug']}")
 
     st.divider()
 
@@ -160,7 +159,7 @@ if mode == "N=1 단일 종목":
             "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
             "부채비율": snap.debt_ratio, "유동비율": snap.current_ratio,
             "이자보상배율": snap.interest_coverage,
-            "매출YoY": None, "영업이익YoY": None, "EPS YoY": None,
+            "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
             "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
         }
         static_bench = mock.get_static_benchmark_table(entity.name, real_values)
@@ -253,7 +252,7 @@ else:
             "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
             "부채비율": snap.debt_ratio, "유동비율": snap.current_ratio,
             "이자보상배율": snap.interest_coverage,
-            "매출YoY": None, "영업이익YoY": None, "EPS YoY": None,
+            "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
             "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
         }
 
