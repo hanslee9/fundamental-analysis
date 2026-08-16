@@ -171,10 +171,21 @@ class KrFreeSourceAdapter(DataSourceAdapter):
 
         if perf_table is not None:
             try:
-                # 컬럼 중 예측치(E)가 아닌 가장 최근 실적 컬럼을 선택
+                # 컬럼 중 "연간" 실적을 우선 선택 (분기 컬럼을 쓰면 매출 등 절대값 지표가
+                # 실제보다 축소되어 PSR 등 비율 계산이 왜곡됨 — 예: 분기매출로 PSR 계산 시 약 4배 과다)
+                def _col_str(c):
+                    return " ".join(str(x) for x in c) if isinstance(c, tuple) else str(c)
+
                 data_cols = [c for c in perf_table.columns if c != perf_table.columns[0]]
-                actual_cols = [c for c in data_cols if "(E)" not in str(c)]
-                target_col = actual_cols[-1] if actual_cols else (data_cols[-1] if data_cols else None)
+                actual_cols = [c for c in data_cols if "(E)" not in _col_str(c)]
+                annual_actual_cols = [c for c in actual_cols if "연간" in _col_str(c)]
+
+                if annual_actual_cols:
+                    target_col = annual_actual_cols[-1]
+                elif actual_cols:
+                    target_col = actual_cols[-1]
+                else:
+                    target_col = data_cols[-1] if data_cols else None
 
                 def _row_value(label_keyword: str):
                     row = perf_table[perf_table.iloc[:, 0].astype(str).str.contains(label_keyword, na=False)]
