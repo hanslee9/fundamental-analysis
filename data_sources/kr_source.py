@@ -157,6 +157,20 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 snap.operating_margin = _row_value("영업이익률")
                 snap.net_margin = _row_value("순이익률")
                 snap.debt_ratio = _row_value("부채비율")
+
+                # PSR = 시가총액 / 매출액 (매출액은 억원 단위, 시가총액도 억원 단위로 맞춰 계산)
+                revenue = _row_value("매출액")
+                market_cap_label = soup.find(string=re.compile("시가총액"))
+                market_cap = None
+                if market_cap_label:
+                    mc_parent = market_cap_label.find_parent("tr")
+                    if mc_parent:
+                        mc_em = mc_parent.find("em")
+                        if mc_em:
+                            # "3,614,532" 형태(억원 단위, 콤마 포함) 파싱
+                            market_cap = _parse_float(mc_em.text)
+                if revenue and market_cap and revenue != 0:
+                    snap.psr = round(market_cap / revenue, 2)
             except Exception:
                 pass  # 표 구조가 예상과 다르면 해당 필드는 N/A로 남김
 
