@@ -6,10 +6,15 @@ KrFreeSourceAdapter — 네이버금융 직접 크롤링 기반 한국 시장 �
 'index -1 is out of bounds for axis 0 with size 0' 에러를 반환하는 미해결 이슈가 있어
 (GitHub sharebook-kr/pykrx#164, #193) pykrx 대신 네이버금융을 직접 크롤링하는 방식으로 전환.
 
+단, pykrx.stock.get_index_fundamental()은 종목명 매핑과 무관한 별도 KRX 엔드포인트를
+호출하는 함수라 위 이슈와 무관하게 동작할 가능성이 높음 → 지수(코스피/코스닥) 평균
+PER/PBR/배당수익률 조회 전용으로 pykrx를 다시 사용 (§3 벤치마크 비교 실데이터화).
+
 구현 범위 (1차):
   - search_entity: 네이버 종목 자동완성 API 사용 (종목코드 6자리 직접 입력도 지원)
   - get_valuation_snapshot: 네이버금융 종목 메인 페이지에서 PER/PBR 등 파싱
   - get_price_series: 네이버금융 시세 JSON API 사용
+  - get_index_average: pykrx로 코스피/코스닥 지수 평균 PER/PBR/배당수익률 조회 (§3)
   - get_quarterly_financials: 2차 구현 예정 (재무제표 페이지 파싱 필요, 복잡도 높음)
 """
 
@@ -25,12 +30,54 @@ from bs4 import BeautifulSoup
 from .base import DataSourceAdapter
 from .schema import Entity, EntityType, Market, ValuationSnapshot, QuarterlyFinancials, PriceSeries
 
+try:
+    from pykrx import stock as pykrx_stock
+except ImportError:
+    pykrx_stock = None
+
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 
 class KrFreeSourceAdapter(DataSourceAdapter):
     name = "kr_free"
     supported_markets = [Market.KR]
+
+    def get_index_average(self, index_name: str = "코스피", max_tries: int = 10) -> dict:
+        """
+        지수 평균 PER/PBR/배당수익률 조회 (§3 벤치마크용).
+        index_name: "코스피" 또는 "코스닥"
+        휴장일 등으로 특정 날짜에 데이터가 없으면 최대 max_tries 영업일 전까지 재시도.
+        반환: {"PER": .., "PBR": .., "배당수익률": ..} (실패 시 각 값 None)
+        """
+        result = {"PER": None, "PBR": None, "배당수익률": None}
+        if pykrx_stock is None:
+            return result
+
+        d = datetime.now()
+        tried = 0
+        while tried < max_tries:
+            if d.weekday() < 5:
+                date_str = d.strftime("%Y%m%d")
+                try:
+                    df = pykrx_stock.get_index_fundamental(date_str, date_str, index_name)
+                except Exception:
+                    df = None
+                if df is not None and not df.empty:
+                    row = df.iloc[-1]
+                    per = row.get("PER")
+                    pbr = row.get("PBR")
+                    div = row.get("배당수익률")
+                    if per is not None and per == per:  # NaN 체크
+                        result["PER"] = float(per)
+                    if pbr is not None and pbr == pbr:
+                        result["PBR"] = float(pbr)
+                    if div is not None and div == div:
+                        result["배당수익률"] = float(div)
+                    if any(v is not None for v in result.values()):
+                        return result
+                tried += 1
+            d -= timedelta(days=1)
+        return result
 
     def search_entity(self, query: str, market: str = "KR") -> List[Entity]:
         query = query.strip()
@@ -47,30 +94,29 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 ]
             return []
 
-        # 종목명 검색: 네이버 자동완성 API
+        # 종목명 검색: 네이버 공식 자동완성 API (m.stock.naver.com)
         try:
-            url = "https://ac.stock.naver.com/ac"
-            params = {"q": query, "target": "stock", "st": "111", "r_lt": "111"}
+            url = "https://m.stock.naver.com/front-api/search/autoComplete"
+            params = {"query": query, "target": "stock,index,marketindicator,coin,ipo"}
             resp = requests.get(url, params=params, headers=HEADERS, timeout=5)
             data = resp.json()
         except Exception:
             return []  # 자동완성 실패 시 빈 결과 (사용자에게는 코드 직접 입력 안내)
 
+        items = (data.get("result") or {}).get("items", [])
         results = []
-        for group in data.get("items", []):
-            for item in group:
-                try:
-                    code = item[0]
-                    name = item[1]
-                except (IndexError, TypeError):
-                    continue
-                if re.fullmatch(r"\d{6}", str(code)):
-                    results.append(
-                        Entity(
-                            code=code, name=name, entity_type=EntityType.STOCK,
-                            market=Market.KR, currency="KRW",
-                        )
+        for item in items:
+            code = item.get("code")
+            name = item.get("name")
+            if not code or not name:
+                continue
+            if re.fullmatch(r"\d{6}", str(code)):  # 국내 종목(6자리 코드)만 채택
+                results.append(
+                    Entity(
+                        code=code, name=name, entity_type=EntityType.STOCK,
+                        market=Market.KR, currency="KRW",
                     )
+                )
         return results[:20]
 
     def _get_name_by_code(self, code: str) -> str:
