@@ -145,6 +145,8 @@ if mode == "N=1 단일 종목":
                 st.metric(label, f"{value:.2f}" if value is not None else "N/A")
         if snap.flags.get("_pending"):
             st.caption(f"⚠ {snap.flags['_pending']}")
+        if snap.flags.get("psr_debug"):
+            st.caption(f"🔍 PSR 디버그: {snap.flags['psr_debug']}")
 
     st.divider()
 
