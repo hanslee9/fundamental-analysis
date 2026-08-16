@@ -122,7 +122,7 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         반환: (table 또는 None, 디버그 메시지)
         """
         try:
-            url = "https://navercomp.wisereport.co.kr/v2/company/c1030001.aspx"
+            url = "https://navercomp.wisereport.co.kr/v2/company/c1040001.aspx"
             params = {"cmp_cd": code, "fin_typ": "0", "freq_typ": "Y"}
             resp = requests.get(url, params=params, headers=HEADERS, timeout=8)
             resp.encoding = "utf-8"
