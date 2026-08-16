@@ -146,6 +146,8 @@ if mode == "N=1 단일 종목":
                 st.metric(label, f"{value:.2f}" if value is not None else "N/A")
         if snap.flags.get("_pending"):
             st.caption(f"⚠ {snap.flags['_pending']}")
+        if snap.flags.get("ratio_debug"):
+            st.caption(f"🔍 유동비율/이자보상배율 디버그: {snap.flags['ratio_debug']}")
 
     st.divider()
 
