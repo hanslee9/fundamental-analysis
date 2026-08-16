@@ -16,13 +16,15 @@ import pandas as pd
 from config import get_adapter
 from data_sources.schema import EntityType, Market
 
-#st.set_page_config(page_title="종목(지수) 펀더멘털 분석/비교", layout="wide")
-#st.title("종목(지수) 펀더멘털 분석/비교")
-#st.caption("N=1 단일 종목 조회 — 1차 버전 (섹터·지수 벤치마크는 추후 추가)")
-
 st.set_page_config(page_title="종목(지수) 펀더멘털 분석/비교", layout="wide")
 
 
+# ── 비밀번호 게이트 ──────────────────────────────────────────
+# 비밀번호는 코드에 직접 넣지 않고 SL Cloud의 Secrets에 저장한 값을 사용.
+# (SL Cloud 배포 후 Settings → Secrets 에 아래 형식으로 등록)
+#   password = "여기에_원하는_비밀번호"
+#
+# 나중에 비밀번호 기능을 없애고 싶으면 이 블록 전체를 삭제하면 됩니다.
 def check_password() -> bool:
     if st.session_state.get("authenticated", False):
         return True
@@ -45,6 +47,7 @@ def check_password() -> bool:
 
 if not check_password():
     st.stop()
+# ── 비밀번호 게이트 끝 ────────────────────────────────────────
 
 
 st.title("종목(지수) 펀더멘털 분석/비교")
