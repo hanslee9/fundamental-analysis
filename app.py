@@ -135,10 +135,13 @@ if mode == "N=1 단일 종목":
             ("배당수익률(%)", snap.dividend_yield), ("ROE(%)", snap.roe), ("ROA(%)", snap.roa),
             ("영업이익률(%)", snap.operating_margin), ("순이익률(%)", snap.net_margin),
             ("부채비율", snap.debt_ratio), ("유동비율", snap.current_ratio),
+            ("이자보상배율", snap.interest_coverage),
+            ("매출YoY(%)", None), ("영업이익YoY(%)", None), ("EPS YoY(%)", None),
+            ("FCF(억원)", snap.fcf), ("FCF Yield(%)", snap.fcf_yield),
         ]
-        cols = st.columns(4)
+        cols = st.columns(5)
         for i, (label, value) in enumerate(metric_rows):
-            with cols[i % 4]:
+            with cols[i % 5]:
                 st.metric(label, f"{value:.2f}" if value is not None else "N/A")
         if snap.flags.get("_pending"):
             st.caption(f"⚠ {snap.flags['_pending']}")
