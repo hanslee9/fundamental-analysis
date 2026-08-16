@@ -114,44 +114,6 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         total = jo_val * 10000 + eok_val
         return total if total > 0 else None
 
-    def _fetch_financial_ratio_table(self, code: str):
-        """
-        네이버금융 안정성비율(유동비율/이자보상배율 등) 표 파싱.
-        WiseReport 기반 페이지라 main.naver와 별도 요청 필요.
-        TODO(실데이터 검증): URL/구조가 실제와 다르면 라이브 테스트 후 조정 필요.
-        반환: (table 또는 None, 디버그 메시지)
-        """
-        try:
-            url = "https://navercomp.wisereport.co.kr/v2/company/c1040001.aspx"
-            params = {"cmp_cd": code, "fin_typ": "0", "freq_typ": "Y"}
-            resp = requests.get(url, params=params, headers=HEADERS, timeout=8)
-            resp.encoding = "utf-8"
-            status = resp.status_code
-        except Exception as e:
-            return None, f"요청 실패: {e}"
-
-        if status != 200:
-            return None, f"HTTP {status}"
-
-        try:
-            from io import StringIO
-            tables = pd.read_html(StringIO(resp.text))
-        except Exception as e:
-            return None, f"표 파싱 실패(read_html): {e} (응답길이={len(resp.text)})"
-
-        if not tables:
-            return None, f"페이지에 표 자체가 없음 (응답길이={len(resp.text)})"
-
-        for t in tables:
-            try:
-                first_col = t.iloc[:, 0].astype(str).tolist()
-            except Exception:
-                continue
-            if any("유동비율" in str(x) for x in first_col):
-                return t, f"성공 (표 {len(tables)}개 중 매칭됨)"
-
-        return None, f"표 {len(tables)}개 중 '유동비율' 포함 표 없음"
-
     def get_valuation_snapshot(self, entity: Entity, as_of: str = None) -> ValuationSnapshot:
         snap = ValuationSnapshot(entity=entity, as_of=as_of or datetime.now().strftime("%Y-%m-%d"))
 
@@ -246,10 +208,10 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                     return round((cur - prev) / abs(prev) * 100, 1)
 
                 snap.roe = _row_value("ROE")
-                snap.roa = _row_value("ROA")
                 snap.operating_margin = _row_value("영업이익률")
                 snap.net_margin = _row_value("순이익률")
                 snap.debt_ratio = _row_value("부채비율")
+                snap.retention_ratio = _row_value("유보율")
 
                 # 성장성 (§8-1) — 연간 vs 직전 연간 비교
                 snap.revenue_yoy = _yoy("매출액")
@@ -263,44 +225,6 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                     snap.psr = round(market_cap / revenue, 2)
             except Exception:
                 pass  # 표 구조가 예상과 다르면 해당 필드는 N/A로 남김
-
-        # ── 안정성비율(유동비율/이자보상배율) 파싱 ──────────
-        try:
-            ratio_table, ratio_debug = self._fetch_financial_ratio_table(entity.code)
-            snap.flags["ratio_debug"] = ratio_debug
-            if ratio_table is not None:
-                def _rt_col_str(c):
-                    return " ".join(str(x) for x in c) if isinstance(c, tuple) else str(c)
-
-                rt_cols = [c for c in ratio_table.columns if c != ratio_table.columns[0]]
-                rt_actual = [c for c in rt_cols if "(E)" not in _rt_col_str(c)]
-                rt_annual = [c for c in rt_actual if "연간" in _rt_col_str(c)]
-                rt_target = rt_annual[-1] if rt_annual else (rt_actual[-1] if rt_actual else (rt_cols[-1] if rt_cols else None))
-
-                def _rt_value(keyword):
-                    row = ratio_table[ratio_table.iloc[:, 0].astype(str).str.contains(keyword, na=False)]
-                    if row.empty or rt_target is None:
-                        return None
-                    return _parse_float(str(row.iloc[0][rt_target]))
-
-                snap.current_ratio = _rt_value("유동비율")
-                snap.interest_coverage = _rt_value("이자보상배율")
-        except Exception as e:
-            snap.flags["ratio_debug"] = f"예외 발생: {e}"
-
-        pending_items = []
-        if snap.psr is None:
-            pending_items.append("PSR")
-        if snap.ev_ebitda is None:
-            pending_items.append("EV/EBITDA")
-        if snap.current_ratio is None:
-            pending_items.append("유동비율")
-        if snap.interest_coverage is None:
-            pending_items.append("이자보상배율")
-        if snap.fcf is None:
-            pending_items.append("FCF/FCF Yield")
-        if pending_items:
-            snap.flags["_pending"] = f"{', '.join(pending_items)} 등은 2차 작업(재무제표 상세) 이후 채워짐"
 
         return snap
 

@@ -54,16 +54,14 @@ class UsFreeSourceAdapter(DataSourceAdapter):
         snap.psr = info.get("priceToSalesTrailing12Months")
         snap.dividend_yield = info.get("dividendYield")
         snap.roe = info.get("returnOnEquity")
-        snap.roa = info.get("returnOnAssets")
         snap.operating_margin = info.get("operatingMargins")
         snap.net_margin = info.get("profitMargins")
         snap.debt_ratio = info.get("debtToEquity")
-        snap.current_ratio = info.get("currentRatio")
+        # 유보율/YoY 성장률은 yfinance 기본 info에 없어 2차 작업으로 별도 계산 필요
 
         if snap.per is None or (snap.per is not None and snap.per <= 0):
             snap.flags["per"] = "N/A(적자 또는 데이터없음)"
 
-        snap.flags["_pending"] = "EV/EBITDA, FCF/FCF Yield, 이자보상배율은 2차 계산 로직 필요"
         return snap
 
     def get_quarterly_financials(self, entity: Entity, n_quarters: int = 8) -> List[QuarterlyFinancials]:

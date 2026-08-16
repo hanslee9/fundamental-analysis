@@ -46,23 +46,16 @@ class ValuationSnapshot:
     per: Optional[float] = None
     pbr: Optional[float] = None
     psr: Optional[float] = None
-    ev_ebitda: Optional[float] = None
     dividend_yield: Optional[float] = None
 
     # 수익성
     roe: Optional[float] = None
-    roa: Optional[float] = None
     operating_margin: Optional[float] = None
     net_margin: Optional[float] = None
 
     # 건전성
     debt_ratio: Optional[float] = None
-    current_ratio: Optional[float] = None
-    interest_coverage: Optional[float] = None
-
-    # 현금흐름
-    fcf: Optional[float] = None
-    fcf_yield: Optional[float] = None
+    retention_ratio: Optional[float] = None  # 유보율 (유동비율 대체 — §데이터 소스 제약)
 
     # 성장성 (연간 기준 YoY, §8-1)
     revenue_yoy: Optional[float] = None
