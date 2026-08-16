@@ -119,16 +119,28 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         네이버금융 안정성비율(유동비율/이자보상배율 등) 표 파싱.
         WiseReport 기반 페이지라 main.naver와 별도 요청 필요.
         TODO(실데이터 검증): URL/구조가 실제와 다르면 라이브 테스트 후 조정 필요.
+        반환: (table 또는 None, 디버그 메시지)
         """
         try:
             url = "https://navercomp.wisereport.co.kr/v2/company/c1030001.aspx"
             params = {"cmp_cd": code, "fin_typ": "0", "freq_typ": "Y"}
             resp = requests.get(url, params=params, headers=HEADERS, timeout=8)
             resp.encoding = "utf-8"
+            status = resp.status_code
+        except Exception as e:
+            return None, f"요청 실패: {e}"
+
+        if status != 200:
+            return None, f"HTTP {status}"
+
+        try:
             from io import StringIO
             tables = pd.read_html(StringIO(resp.text))
-        except Exception:
-            return None
+        except Exception as e:
+            return None, f"표 파싱 실패(read_html): {e} (응답길이={len(resp.text)})"
+
+        if not tables:
+            return None, f"페이지에 표 자체가 없음 (응답길이={len(resp.text)})"
 
         for t in tables:
             try:
@@ -136,8 +148,9 @@ class KrFreeSourceAdapter(DataSourceAdapter):
             except Exception:
                 continue
             if any("유동비율" in str(x) for x in first_col):
-                return t
-        return None
+                return t, f"성공 (표 {len(tables)}개 중 매칭됨)"
+
+        return None, f"표 {len(tables)}개 중 '유동비율' 포함 표 없음"
 
     def get_valuation_snapshot(self, entity: Entity, as_of: str = None) -> ValuationSnapshot:
         snap = ValuationSnapshot(entity=entity, as_of=as_of or datetime.now().strftime("%Y-%m-%d"))
@@ -253,7 +266,8 @@ class KrFreeSourceAdapter(DataSourceAdapter):
 
         # ── 안정성비율(유동비율/이자보상배율) 파싱 ──────────
         try:
-            ratio_table = self._fetch_financial_ratio_table(entity.code)
+            ratio_table, ratio_debug = self._fetch_financial_ratio_table(entity.code)
+            snap.flags["ratio_debug"] = ratio_debug
             if ratio_table is not None:
                 def _rt_col_str(c):
                     return " ".join(str(x) for x in c) if isinstance(c, tuple) else str(c)
@@ -271,8 +285,8 @@ class KrFreeSourceAdapter(DataSourceAdapter):
 
                 snap.current_ratio = _rt_value("유동비율")
                 snap.interest_coverage = _rt_value("이자보상배율")
-        except Exception:
-            pass  # 안정성비율 페이지 조회 실패해도 나머지 지표는 정상 반환
+        except Exception as e:
+            snap.flags["ratio_debug"] = f"예외 발생: {e}"
 
         pending_items = []
         if snap.psr is None:
