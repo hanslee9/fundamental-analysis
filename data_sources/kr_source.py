@@ -89,14 +89,21 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         네이버금융 시가총액은 "374조 5,633억원"처럼 조/억이 나뉘어 표시되는 경우가 많아
         전체 텍스트에서 조/억 숫자를 각각 추출해 억원 단위로 환산 합산한다.
         (1조 = 10,000억)
+
+        페이지 안에 "시가총액"이라는 글자가 여러 곳(동일업종 비교표 등)에 나올 수 있어,
+        우선 고유 id(#_market_sum)로 먼저 찾고, 실패하면 텍스트 검색으로 대체한다.
         """
-        label = soup.find(string=re.compile("시가총액"))
-        if not label:
+        target = soup.select_one("#_market_sum")
+        if target is None:
+            label = soup.find(string=re.compile("시가총액"))
+            if label:
+                parent = label.find_parent("tr") or label.find_parent("td")
+                target = parent
+
+        if target is None:
             return None
-        parent = label.find_parent("tr")
-        if not parent:
-            return None
-        text = parent.get_text()
+
+        text = target.get_text()
 
         jo_match = re.search(r"([\d,]+)\s*조", text)
         eok_match = re.search(r"조?\s*([\d,]+)\s*억", text)
@@ -186,8 +193,14 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 market_cap = self._parse_market_cap_eok(soup)
                 if revenue and market_cap and revenue != 0:
                     snap.psr = round(market_cap / revenue, 2)
-            except Exception:
-                pass  # 표 구조가 예상과 다르면 해당 필드는 N/A로 남김
+                else:
+                    # 디버깅용: 매출액/시가총액 중 어느 쪽이 실패했는지 표시
+                    if revenue is None:
+                        snap.flags["psr_debug"] = "매출액 파싱 실패"
+                    elif market_cap is None:
+                        snap.flags["psr_debug"] = "시가총액 파싱 실패"
+            except Exception as e:
+                snap.flags["psr_debug"] = f"PSR 계산 중 예외: {e}"
 
         pending_items = []
         if snap.psr is None:
