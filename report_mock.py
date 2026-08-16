@@ -57,14 +57,29 @@ def _mock_value(metric_name: str) -> float:
 
 
 # ── N=1 정적 분석: 종목 vs 섹터 vs 지수 (§3) ────────────────────
-def get_static_benchmark_table(entity_name: str) -> list[dict]:
+def get_static_benchmark_table(entity_name: str, real_values: dict) -> list[dict]:
     """
-    TODO(실데이터): 종목 스냅샷 + 섹터평균 + 지수평균 실제 계산으로 교체
-    카테고리 | 지표 | 종목값 | 섹터평균 | 지수평균 | 괴리율(vs섹터) | 괴리율(vs지수)
+    TODO(실데이터): 섹터평균/지수평균만 실제 계산으로 교체 (종목값은 이미 실데이터 사용 중)
+    카테고리 | 지표 | 종목값(실데이터) | 섹터평균(샘플) | 지수평균(샘플) | 괴리율(vs섹터) | 괴리율(vs지수)
+
+    real_values: {"PER": 14.4, "PBR": 12.6, ...} 형태. 값이 없는 지표는 None으로 전달하면 N/A 처리.
+    위쪽 "정적 분석" 카드와 반드시 같은 종목값을 써야 두 표가 일관됨 — 절대 여기서 새로 난수 생성하지 않음.
     """
     result = []
     for category, name, unit in METRIC_SCHEMA:
-        val = _mock_value(name)
+        val = real_values.get(name)
+        if val is None:
+            result.append({
+                "카테고리": category,
+                "지표": name,
+                f"{entity_name}": "N/A",
+                "섹터평균": "N/A",
+                "지수평균": "N/A",
+                "괴리율(vs섹터)": "N/A",
+                "괴리율(vs지수)": "N/A",
+            })
+            continue
+        # 섹터/지수 평균은 아직 실제 데이터가 없어 샘플로 생성 (TODO 대상)
         sector = round(val * random.uniform(0.8, 1.2), 1)
         index = round(val * random.uniform(0.7, 1.3), 1)
         gap_sector = round((val - sector) / sector * 100, 1) if sector else 0
@@ -73,8 +88,8 @@ def get_static_benchmark_table(entity_name: str) -> list[dict]:
             "카테고리": category,
             "지표": name,
             f"{entity_name}": f"{val}{unit}",
-            "섹터평균": f"{sector}{unit}",
-            "지수평균": f"{index}{unit}",
+            "섹터평균": f"{sector}{unit}(샘플)",
+            "지수평균": f"{index}{unit}(샘플)",
             "괴리율(vs섹터)": f"{gap_sector:+.1f}%",
             "괴리율(vs지수)": f"{gap_index:+.1f}%",
         })
@@ -104,13 +119,21 @@ def get_dynamic_benchmark_table(entity_name: str, n_quarters: int = 8) -> list[d
     return result
 
 
-# ── N=2 §6-1 정적 비교 테이블 (17개 지표 전체) ────────────────
-def get_n2_static_table(name_a: str, name_b: str) -> list[dict]:
-    """TODO(실데이터): A/B 실제 스냅샷 비교로 교체"""
+# ── N=2 §6-1 정적 비교 테이블 (17개 지표 전체, 실데이터 사용) ────
+def get_n2_static_table(name_a: str, name_b: str, real_values_a: dict, real_values_b: dict) -> list[dict]:
+    """A/B 모두 실제 스냅샷 값을 전달받아 사용. 여기서 새로 난수 생성하지 않음."""
     result = []
     for category, name, unit in METRIC_SCHEMA:
-        a_val = _mock_value(name)
-        b_val = _mock_value(name)
+        a_val = real_values_a.get(name)
+        b_val = real_values_b.get(name)
+        if a_val is None or b_val is None:
+            result.append({
+                "카테고리": category, "지표": f"{name}({unit})",
+                f"{name_a}": "N/A" if a_val is None else a_val,
+                f"{name_b}": "N/A" if b_val is None else b_val,
+                "차이(A-B)": "N/A", "배수(A/B)": "N/A", "우위": "N/A",
+            })
+            continue
         diff = round(a_val - b_val, 1)
         ratio = round(a_val / b_val, 2) if b_val else None
         winner = name_a if a_val > b_val else name_b

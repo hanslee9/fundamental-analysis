@@ -148,11 +148,23 @@ if mode == "N=1 단일 종목":
 
     st.divider()
 
-    # ── §3 벤치마크 3단 구조 (정적) — 목업 ──────────────────
+    # ── §3 벤치마크 3단 구조 (정적) — 종목값은 실데이터, 섹터/지수는 샘플 ──
     render_section_header("정적 벤치마크 비교 (종목 vs 섹터 vs 지수)")
-    st.caption("⚠ 샘플 데이터 — 실제 섹터/지수 연동 전 레이아웃 검증용")
-    static_bench = mock.get_static_benchmark_table(entity.name)
-    st.dataframe(pd.DataFrame(static_bench), use_container_width=True, hide_index=True)
+    st.caption("⚠ 종목값은 위와 동일한 실데이터입니다. 섹터평균/지수평균만 샘플 데이터입니다.")
+    if snap:
+        real_values = {
+            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr, "EV/EBITDA": snap.ev_ebitda,
+            "배당수익률": snap.dividend_yield, "ROE": snap.roe, "ROA": snap.roa,
+            "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
+            "부채비율": snap.debt_ratio, "유동비율": snap.current_ratio,
+            "이자보상배율": snap.interest_coverage,
+            "매출YoY": None, "영업이익YoY": None, "EPS YoY": None,
+            "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
+        }
+        static_bench = mock.get_static_benchmark_table(entity.name, real_values)
+        st.dataframe(pd.DataFrame(static_bench), use_container_width=True, hide_index=True)
+    else:
+        st.info("종목 지표 조회에 실패하여 벤치마크 비교를 표시할 수 없습니다.")
 
     st.divider()
 
@@ -217,10 +229,36 @@ else:
     name_a, name_b = entity_a.name, entity_b.name
     render_section_header(f"{name_a} ({entity_a.code}) vs {name_b} ({entity_b.code})")
 
-    # ── §6-1 정적 지표 비교 (17개 지표, 목업) ─────────────
+    # 실제 스냅샷 조회 (A/B 각각) — 아래 정적 지표 비교에 그대로 사용
+    with st.spinner("정적 지표 조회 중..."):
+        try:
+            snap_a = adapter_a.get_valuation_snapshot(entity_a)
+        except Exception as e:
+            snap_a = None
+            st.error(f"{name_a} 지표 조회 중 오류: {e}")
+        try:
+            snap_b = adapter_b.get_valuation_snapshot(entity_b)
+        except Exception as e:
+            snap_b = None
+            st.error(f"{name_b} 지표 조회 중 오류: {e}")
+
+    def _snap_to_dict(snap):
+        if snap is None:
+            return {k: None for _, k, _ in mock.METRIC_SCHEMA}
+        return {
+            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr, "EV/EBITDA": snap.ev_ebitda,
+            "배당수익률": snap.dividend_yield, "ROE": snap.roe, "ROA": snap.roa,
+            "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
+            "부채비율": snap.debt_ratio, "유동비율": snap.current_ratio,
+            "이자보상배율": snap.interest_coverage,
+            "매출YoY": None, "영업이익YoY": None, "EPS YoY": None,
+            "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
+        }
+
+    # ── §6-1 정적 지표 비교 (17개 지표, 실데이터) ─────────
     render_subsection_header("정적 지표 비교")
-    st.caption("⚠ 샘플 데이터")
-    static_df = pd.DataFrame(mock.get_n2_static_table(name_a, name_b))
+    st.caption("⚠ 실데이터 (섹터/지수 벤치마크는 미포함)")
+    static_df = pd.DataFrame(mock.get_n2_static_table(name_a, name_b, _snap_to_dict(snap_a), _snap_to_dict(snap_b)))
     st.dataframe(static_df, use_container_width=True, hide_index=True)
 
     st.divider()
