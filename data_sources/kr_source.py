@@ -114,6 +114,31 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         total = jo_val * 10000 + eok_val
         return total if total > 0 else None
 
+    def _fetch_financial_ratio_table(self, code: str):
+        """
+        네이버금융 안정성비율(유동비율/이자보상배율 등) 표 파싱.
+        WiseReport 기반 페이지라 main.naver와 별도 요청 필요.
+        TODO(실데이터 검증): URL/구조가 실제와 다르면 라이브 테스트 후 조정 필요.
+        """
+        try:
+            url = "https://navercomp.wisereport.co.kr/v2/company/c1030001.aspx"
+            params = {"cmp_cd": code, "fin_typ": "0", "freq_typ": "Y"}
+            resp = requests.get(url, params=params, headers=HEADERS, timeout=8)
+            resp.encoding = "utf-8"
+            from io import StringIO
+            tables = pd.read_html(StringIO(resp.text))
+        except Exception:
+            return None
+
+        for t in tables:
+            try:
+                first_col = t.iloc[:, 0].astype(str).tolist()
+            except Exception:
+                continue
+            if any("유동비율" in str(x) for x in first_col):
+                return t
+        return None
+
     def get_valuation_snapshot(self, entity: Entity, as_of: str = None) -> ValuationSnapshot:
         snap = ValuationSnapshot(entity=entity, as_of=as_of or datetime.now().strftime("%Y-%m-%d"))
 
@@ -225,6 +250,29 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                     snap.psr = round(market_cap / revenue, 2)
             except Exception:
                 pass  # 표 구조가 예상과 다르면 해당 필드는 N/A로 남김
+
+        # ── 안정성비율(유동비율/이자보상배율) 파싱 ──────────
+        try:
+            ratio_table = self._fetch_financial_ratio_table(entity.code)
+            if ratio_table is not None:
+                def _rt_col_str(c):
+                    return " ".join(str(x) for x in c) if isinstance(c, tuple) else str(c)
+
+                rt_cols = [c for c in ratio_table.columns if c != ratio_table.columns[0]]
+                rt_actual = [c for c in rt_cols if "(E)" not in _rt_col_str(c)]
+                rt_annual = [c for c in rt_actual if "연간" in _rt_col_str(c)]
+                rt_target = rt_annual[-1] if rt_annual else (rt_actual[-1] if rt_actual else (rt_cols[-1] if rt_cols else None))
+
+                def _rt_value(keyword):
+                    row = ratio_table[ratio_table.iloc[:, 0].astype(str).str.contains(keyword, na=False)]
+                    if row.empty or rt_target is None:
+                        return None
+                    return _parse_float(str(row.iloc[0][rt_target]))
+
+                snap.current_ratio = _rt_value("유동비율")
+                snap.interest_coverage = _rt_value("이자보상배율")
+        except Exception:
+            pass  # 안정성비율 페이지 조회 실패해도 나머지 지표는 정상 반환
 
         pending_items = []
         if snap.psr is None:
