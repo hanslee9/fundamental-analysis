@@ -71,7 +71,10 @@ def style_negative_red(df: pd.DataFrame):
         if isinstance(val, str) and val.strip().startswith("-"):
             return "color: #d32f2f"
         return ""
-    return df.style.applymap(_color)
+    try:
+        return df.style.map(_color)  # pandas >= 2.1
+    except AttributeError:
+        return df.style.applymap(_color)  # pandas 구버전 호환
 
 
 # 전반적인 폰트 크기 축소 (표/메트릭/본문 텍스트)
