@@ -46,16 +46,24 @@ class ValuationSnapshot:
     per: Optional[float] = None
     pbr: Optional[float] = None
     psr: Optional[float] = None
+    ev_ebitda: Optional[float] = None  # 미국(yfinance)만 지원, 한국은 N/A
     dividend_yield: Optional[float] = None
 
     # 수익성
     roe: Optional[float] = None
+    roa: Optional[float] = None  # 미국(yfinance)만 지원, 한국은 N/A
     operating_margin: Optional[float] = None
     net_margin: Optional[float] = None
 
     # 건전성
     debt_ratio: Optional[float] = None
-    retention_ratio: Optional[float] = None  # 유보율 (유동비율 대체 — §데이터 소스 제약)
+    retention_ratio: Optional[float] = None  # 유보율 — 한국(네이버)만 지원
+    current_ratio: Optional[float] = None  # 유동비율 — 미국(yfinance)만 지원
+    interest_coverage: Optional[float] = None  # 이자보상배율 — 미국(yfinance)만 지원
+
+    # 현금흐름 — 미국(yfinance)만 지원
+    fcf: Optional[float] = None  # 단위: 백만달러
+    fcf_yield: Optional[float] = None
 
     # 성장성 (연간 기준 YoY, §8-1)
     revenue_yoy: Optional[float] = None

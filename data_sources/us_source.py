@@ -54,13 +54,65 @@ class UsFreeSourceAdapter(DataSourceAdapter):
         snap.psr = info.get("priceToSalesTrailing12Months")
         snap.dividend_yield = info.get("dividendYield")
         snap.roe = info.get("returnOnEquity")
+        snap.roa = info.get("returnOnAssets")
         snap.operating_margin = info.get("operatingMargins")
         snap.net_margin = info.get("profitMargins")
         snap.debt_ratio = info.get("debtToEquity")
+        snap.current_ratio = info.get("currentRatio")
+        snap.ev_ebitda = info.get("enterpriseToEbitda")
         # 유보율/YoY 성장률은 yfinance 기본 info에 없어 2차 작업으로 별도 계산 필요
+
+        # FCF / FCF Yield (백만달러 단위로 환산해 가독성 확보)
+        free_cf = info.get("freeCashflow")
+        market_cap = info.get("marketCap")
+        if free_cf is not None:
+            snap.fcf = round(free_cf / 1_000_000, 1)
+            if market_cap:
+                snap.fcf_yield = round(free_cf / market_cap * 100, 2)
+
+        # 이자보상배율 = 영업이익 / 이자비용 (손익계산서에서 직접 계산, 실패 시 N/A)
+        try:
+            fin = t.financials
+            if fin is not None and not fin.empty:
+                op_income = None
+                interest_exp = None
+                for label in ["Operating Income", "OperatingIncome"]:
+                    if label in fin.index:
+                        op_income = fin.loc[label].iloc[0]
+                        break
+                for label in ["Interest Expense", "InterestExpense"]:
+                    if label in fin.index:
+                        interest_exp = fin.loc[label].iloc[0]
+                        break
+                if op_income is not None and interest_exp not in (None, 0):
+                    snap.interest_coverage = round(float(op_income) / abs(float(interest_exp)), 2)
+        except Exception:
+            pass  # 이자비용 항목이 없거나 구조가 다르면 N/A로 남김
 
         if snap.per is None or (snap.per is not None and snap.per <= 0):
             snap.flags["per"] = "N/A(적자 또는 데이터없음)"
+
+        # ── 성장성 YoY (연간 재무제표, 최근연도 vs 직전연도) — 한국과 공통 지표 맞추기 ──
+        try:
+            fin_annual = t.financials  # 컬럼: 최근 연도부터 과거 순
+            if fin_annual is not None and not fin_annual.empty and fin_annual.shape[1] >= 2:
+                def _yoy_from_row(row_labels):
+                    for label in row_labels:
+                        if label in fin_annual.index:
+                            cur = fin_annual.loc[label].iloc[0]
+                            prev = fin_annual.loc[label].iloc[1]
+                            if cur is not None and prev not in (None, 0):
+                                try:
+                                    return round((float(cur) - float(prev)) / abs(float(prev)) * 100, 1)
+                                except (TypeError, ValueError):
+                                    return None
+                    return None
+
+                snap.revenue_yoy = _yoy_from_row(["Total Revenue", "TotalRevenue"])
+                snap.operating_income_yoy = _yoy_from_row(["Operating Income", "OperatingIncome"])
+                snap.eps_yoy = _yoy_from_row(["Basic EPS", "Diluted EPS", "BasicEPS", "DilutedEPS"])
+        except Exception:
+            pass  # 연간 재무제표 구조가 다르면 N/A로 남김
 
         return snap
 
