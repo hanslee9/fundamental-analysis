@@ -22,18 +22,14 @@ except ImportError:
     pykrx_stock = None
 
 
-def _latest_business_day() -> str:
-    """pykrx 조회용 최근 영업일(YYYYMMDD) 추정. 주말이면 직전 금요일로 보정."""
-    d = datetime.now()
-    while d.weekday() >= 5:  # 5=토, 6=일
-        d -= timedelta(days=1)
-    return d.strftime("%Y%m%d")
-
-
-def _get_ticker_list_with_fallback(mkt: str, max_tries: int = 10) -> List[str]:
+def _get_ticker_name_map_with_fallback(mkt: str, max_tries: int = 10) -> dict:
     """
-    특정 날짜에 pykrx가 빈 데이터/에러를 반환하는 경우(휴장일, 데이터 지연 등)를 대비해
-    최대 max_tries 영업일 전까지 거슬러 올라가며 유효한 종목 리스트를 찾는다.
+    {종목코드: 종목명} 매핑을 반환한다.
+
+    pykrx의 get_market_ticker_name()은 내부 캐시 구조가 불안정하여
+    'index -1 is out of bounds' 에러가 날짜와 무관하게 발생하는 경우가 있음.
+    대신 종목명을 컬럼으로 직접 포함하는 get_market_price_change()를 사용해 우회한다.
+    특정 날짜에 실패하면 최대 max_tries 영업일 전까지 거슬러 올라가며 재시도한다.
     """
     d = datetime.now()
     tried = 0
@@ -41,14 +37,22 @@ def _get_ticker_list_with_fallback(mkt: str, max_tries: int = 10) -> List[str]:
         if d.weekday() < 5:  # 평일만 시도
             date_str = d.strftime("%Y%m%d")
             try:
-                tickers = pykrx_stock.get_market_ticker_list(date=date_str, market=mkt)
-                if tickers:
-                    return tickers
+                df = pykrx_stock.get_market_price_change(date_str, date_str, market=mkt)
+                if df is not None and not df.empty and "종목명" in df.columns:
+                    return dict(zip(df.index, df["종목명"]))
             except Exception:
                 pass
             tried += 1
         d -= timedelta(days=1)
-    return []
+    return {}
+
+
+def _latest_business_day() -> str:
+    """pykrx 조회용 최근 영업일(YYYYMMDD) 추정. 주말이면 직전 금요일로 보정."""
+    d = datetime.now()
+    while d.weekday() >= 5:  # 5=토, 6=일
+        d -= timedelta(days=1)
+    return d.strftime("%Y%m%d")
 
 
 class KrFreeSourceAdapter(DataSourceAdapter):
@@ -61,12 +65,8 @@ class KrFreeSourceAdapter(DataSourceAdapter):
 
         results = []
         for mkt in ["KOSPI", "KOSDAQ"]:
-            tickers = _get_ticker_list_with_fallback(mkt)
-            for t in tickers:
-                try:
-                    nm = pykrx_stock.get_market_ticker_name(t)
-                except Exception:
-                    continue  # 이름 조회 실패한 종목은 건너뜀
+            name_map = _get_ticker_name_map_with_fallback(mkt)
+            for t, nm in name_map.items():
                 if query in nm or query == t:
                     results.append(
                         Entity(
