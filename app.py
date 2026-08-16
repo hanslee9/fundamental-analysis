@@ -16,7 +16,37 @@ import pandas as pd
 from config import get_adapter
 from data_sources.schema import EntityType, Market
 
+#st.set_page_config(page_title="종목(지수) 펀더멘털 분석/비교", layout="wide")
+#st.title("종목(지수) 펀더멘털 분석/비교")
+#st.caption("N=1 단일 종목 조회 — 1차 버전 (섹터·지수 벤치마크는 추후 추가)")
+
 st.set_page_config(page_title="종목(지수) 펀더멘털 분석/비교", layout="wide")
+
+
+def check_password() -> bool:
+    if st.session_state.get("authenticated", False):
+        return True
+
+    st.title("종목(지수) 펀더멘털 분석/비교")
+    pw_input = st.text_input("비밀번호를 입력하세요", type="password")
+
+    if pw_input:
+        correct_pw = st.secrets.get("password", None)
+        if correct_pw is None:
+            st.error("SL Cloud의 Secrets에 password가 설정되지 않았습니다. (Settings → Secrets)")
+            return False
+        if pw_input == correct_pw:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("비밀번호가 올바르지 않습니다.")
+    return False
+
+
+if not check_password():
+    st.stop()
+
+
 st.title("종목(지수) 펀더멘털 분석/비교")
 st.caption("N=1 단일 종목 조회 — 1차 버전 (섹터·지수 벤치마크는 추후 추가)")
 
