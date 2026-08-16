@@ -65,10 +65,10 @@ METRIC_SCHEMA = COMMON_METRIC_SCHEMA
 def fmt_num(value, unit: str = "") -> str:
     """
     지표 값 표기 공통 규칙:
-      - None → "N/A" (단위 없음)
+      - None 또는 NaN → "N/A" (단위 없음)
       - 그 외 → 소수점 2자리 + 천단위 콤마 + 단위(%,배 등) 접미사
     """
-    if value is None:
+    if value is None or (isinstance(value, float) and value != value):
         return "N/A"
     return f"{value:,.2f}{unit}"
 
@@ -76,23 +76,36 @@ def fmt_num(value, unit: str = "") -> str:
 
 
 # ── N=1 정적 분석: 종목 vs 섹터 vs 지수 (§3) ────────────────────
-def get_static_benchmark_table(entity_name: str, real_values: dict) -> list[dict]:
+def get_static_benchmark_table(entity_name: str, real_values: dict, real_index_values: dict = None) -> list[dict]:
     """
-    TODO(실데이터): 섹터평균/지수평균만 실제 계산으로 교체 (종목값은 이미 실데이터 사용 중)
-    카테고리 | 지표 | 종목값(실데이터) | 섹터평균(샘플) | 지수평균(샘플) | 괴리율(vs섹터) | 괴리율(vs지수)
+    TODO(실데이터): 섹터평균은 아직 실제 계산 전(업종 매핑 필요, §8-2)
+    카테고리 | 지표 | 종목값(실데이터) | 섹터평균(샘플) | 지수평균(실데이터 있으면 사용, 없으면 샘플) | 괴리율(vs섹터) | 괴리율(vs지수)
 
     real_values: {"PER": 14.4, "PBR": 12.6, ...} 형태. 값이 없는 지표는 None으로 전달하면 N/A 처리.
+    real_index_values: {"PER": 12.68, "PBR": 1.05, "배당수익률": 2.1} 처럼 실제 지수 평균값이 있으면 전달.
+      전달된 키만 실데이터로 표시되고, 나머지 지표의 지수평균은 여전히 샘플로 표시됨.
     위쪽 "정적 분석" 카드와 반드시 같은 종목값을 써야 두 표가 일관됨 — 절대 여기서 새로 난수 생성하지 않음.
     17개 지표 전체 사용 (N=1은 단일 종목이라 시장별로 없는 값만 N/A 처리).
     """
+    real_index_values = real_index_values or {}
     result = []
     for category, name, unit in FULL_METRIC_SCHEMA:
         val = real_values.get(name)
-        if val is None:
-            continue  # 결측치 지표는 표에서 생략
-        # 섹터/지수 평균은 아직 실제 데이터가 없어 샘플로 생성 (TODO 대상)
+        if val is None or (isinstance(val, float) and val != val):
+            continue  # 결측치(N/A, NaN) 지표는 표에서 생략
+
+        # 섹터 평균은 아직 실제 데이터가 없어 샘플로 생성 (TODO 대상, §8-2 업종 매핑 필요)
         sector = val * random.uniform(0.8, 1.2)
-        index = val * random.uniform(0.7, 1.3)
+
+        # 지수 평균: 실데이터가 있으면 사용, 없으면 샘플
+        real_index_val = real_index_values.get(name)
+        if real_index_val is not None:
+            index = real_index_val
+            index_label = fmt_num(index, unit)  # 실데이터라 "(샘플)" 표기 없음
+        else:
+            index = val * random.uniform(0.7, 1.3)
+            index_label = fmt_num(index, unit) + "(샘플)"
+
         gap_sector = (val - sector) / sector * 100 if sector else 0
         gap_index = (val - index) / index * 100 if index else 0
         result.append({
@@ -100,7 +113,7 @@ def get_static_benchmark_table(entity_name: str, real_values: dict) -> list[dict
             "지표": name,
             f"{entity_name}": fmt_num(val, unit),
             "섹터평균": fmt_num(sector, unit) + "(샘플)",
-            "지수평균": fmt_num(index, unit) + "(샘플)",
+            "지수평균": index_label,
             "괴리율(vs섹터)": f"{gap_sector:+,.2f}%",
             "괴리율(vs지수)": f"{gap_index:+,.2f}%",
         })
