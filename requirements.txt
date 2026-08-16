@@ -1,4 +1,5 @@
 streamlit
-pykrx
 yfinance
 pandas
+requests
+beautifulsoup4
