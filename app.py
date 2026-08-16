@@ -31,26 +31,36 @@ render_title()
 with st.sidebar:
     st.header("검색")
     mode = st.radio("모드", options=["N=1 단일 종목", "N=2 비교(A vs B)"])
-    market = st.radio("시장", options=["KR", "US"], format_func=lambda m: "한국" if m == "KR" else "미국")
 
     if mode == "N=1 단일 종목":
+        market = st.radio("시장", options=["KR", "US"], format_func=lambda m: "한국" if m == "KR" else "미국")
         query = st.text_input("종목명 또는 코드", placeholder="예: 삼성전자 / 005930" if market == "KR" else "예: AAPL")
         search_clicked = st.button("검색", type="primary")
     else:
-        query_a = st.text_input("종목 A", placeholder="예: 삼성전자 / 005930" if market == "KR" else "예: AAPL")
-        query_b = st.text_input("종목 B", placeholder="예: SK하이닉스 / 000660" if market == "KR" else "예: MSFT")
+        st.caption("종목 A, B는 서로 다른 시장이어도 됩니다 (예: 한국 vs 미국)")
+        st.markdown("**종목 A**")
+        market_a = st.radio("시장 A", options=["KR", "US"], format_func=lambda m: "한국" if m == "KR" else "미국", key="market_a")
+        query_a = st.text_input("종목 A 명 또는 코드", placeholder="예: 삼성전자 / 005930" if market_a == "KR" else "예: AAPL", key="query_a")
+
+        st.markdown("**종목 B**")
+        market_b = st.radio("시장 B", options=["KR", "US"], format_func=lambda m: "한국" if m == "KR" else "미국", key="market_b")
+        query_b = st.text_input("종목 B 명 또는 코드", placeholder="예: SK하이닉스 / 000660" if market_b == "KR" else "예: MSFT", key="query_b")
+
         search_clicked = st.button("비교 조회", type="primary")
 
-adapter = get_adapter(market)
+if mode == "N=1 단일 종목":
+    adapter = get_adapter(market)
 
 
-def search_one(q: str):
+def search_one(q: str, mkt: str):
+    """지정된 시장의 어댑터로 종목 하나를 검색"""
+    a = get_adapter(mkt)
     try:
-        results = adapter.search_entity(q, market)
-        return results[0] if results else None
+        results = a.search_entity(q, mkt)
+        return (results[0], a) if results else (None, a)
     except Exception as e:
         st.error(f"'{q}' 검색 중 오류: {e}")
-        return None
+        return None, a
 
 
 # ══════════════════════════════════════════════════════════════
@@ -163,15 +173,17 @@ else:
         st.stop()
 
     with st.spinner("종목 A/B 조회 중..."):
-        entity_a = search_one(query_a)
-        entity_b = search_one(query_b)
+        entity_a, adapter_a = search_one(query_a, market_a)
+        entity_b, adapter_b = search_one(query_b, market_b)
 
     if not entity_a or not entity_b:
         st.error("종목 A 또는 B를 찾을 수 없습니다. 검색어를 확인해주세요.")
         st.stop()
 
     name_a, name_b = entity_a.name, entity_b.name
-    st.subheader(f"{name_a} ({entity_a.code}) vs {name_b} ({entity_b.code})")
+    market_label_a = "한국" if market_a == "KR" else "미국"
+    market_label_b = "한국" if market_b == "KR" else "미국"
+    st.subheader(f"{name_a} ({entity_a.code}, {market_label_a}) vs {name_b} ({entity_b.code}, {market_label_b})")
 
     # ── §6-1 정적 비교 테이블 (목업) ─────────────────────
     st.markdown("#### 정적 비교")
