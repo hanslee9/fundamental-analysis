@@ -44,11 +44,12 @@ def render_subsection_header(text: str):
 def render_metric_card(label: str, value, unit: str = ""):
     """
     지표 카드 렌더러 (st.metric 대체).
-    - 값이 None이면 'N/A' (단위 표기 없음)
+    - 값이 None이거나 NaN이면 'N/A' (단위 표기 없음)
     - 그 외에는 소수점 2자리 + 천단위 콤마 + 단위(%,배 등) 접미사
     - 음수는 빨간색으로 표시
     """
-    if value is None:
+    is_missing = value is None or (isinstance(value, float) and value != value)  # NaN != NaN
+    if is_missing:
         display = "N/A"
         color = "inherit"
     else:
@@ -186,9 +187,12 @@ if mode == "N=1 단일 종목":
 
     st.divider()
 
-    # ── §3 벤치마크 3단 구조 (정적) — 종목값은 실데이터, 섹터/지수는 샘플 ──
+    # ── §3 벤치마크 3단 구조 (정적) — 종목값은 실데이터, 지수평균은 한국만 실데이터 ──
     render_section_header("정적 벤치마크 비교 (종목 vs 섹터 vs 지수)")
-    st.caption("⚠ 종목값은 위와 동일한 실데이터입니다. 섹터평균/지수평균만 샘플 데이터입니다.")
+    if market == "KR":
+        st.caption("⚠ 종목값·코스피 지수평균(PER/PBR/배당수익률)은 실데이터입니다. 섹터평균과 나머지 지수평균은 샘플입니다.")
+    else:
+        st.caption("⚠ 종목값은 위와 동일한 실데이터입니다. 섹터평균/지수평균은 샘플 데이터입니다.")
     if snap:
         real_values = {
             "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr, "EV/EBITDA": snap.ev_ebitda,
@@ -199,7 +203,18 @@ if mode == "N=1 단일 종목":
             "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
             "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
         }
-        static_bench = mock.get_static_benchmark_table(entity.name, real_values)
+
+        # 한국 종목은 코스피 지수 평균(PER/PBR/배당수익률) 실데이터 조회
+        real_index_values = {}
+        if market == "KR" and hasattr(adapter, "get_index_average"):
+            with st.spinner("코스피 지수 평균 조회 중..."):
+                try:
+                    real_index_values = adapter.get_index_average("코스피")
+                    real_index_values = {k: v for k, v in real_index_values.items() if v is not None}
+                except Exception:
+                    real_index_values = {}
+
+        static_bench = mock.get_static_benchmark_table(entity.name, real_values, real_index_values)
         st.dataframe(style_negative_red(pd.DataFrame(static_bench)), use_container_width=True, hide_index=True)
     else:
         st.info("종목 지표 조회에 실패하여 벤치마크 비교를 표시할 수 없습니다.")
