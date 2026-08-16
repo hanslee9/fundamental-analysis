@@ -191,14 +191,15 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 # PSR = 시가총액 / 매출액 (매출액은 억원 단위, 시가총액도 억원 단위로 환산해서 계산)
                 revenue = _row_value("매출액")
                 market_cap = self._parse_market_cap_eok(soup)
+                debug_msg = f"기준컬럼={target_col}, 매출액={revenue}억원, 시가총액={market_cap}억원"
                 if revenue and market_cap and revenue != 0:
                     snap.psr = round(market_cap / revenue, 2)
+                    snap.flags["psr_debug"] = debug_msg  # 성공해도 검증용으로 항상 표시
                 else:
-                    # 디버깅용: 매출액/시가총액 중 어느 쪽이 실패했는지 표시
                     if revenue is None:
-                        snap.flags["psr_debug"] = "매출액 파싱 실패"
+                        snap.flags["psr_debug"] = f"매출액 파싱 실패 ({debug_msg})"
                     elif market_cap is None:
-                        snap.flags["psr_debug"] = "시가총액 파싱 실패"
+                        snap.flags["psr_debug"] = f"시가총액 파싱 실패 ({debug_msg})"
             except Exception as e:
                 snap.flags["psr_debug"] = f"PSR 계산 중 예외: {e}"
 
