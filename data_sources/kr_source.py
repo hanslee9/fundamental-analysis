@@ -121,9 +121,59 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         if snap.per is None:
             snap.flags["per"] = "N/A(적자 또는 파싱 실패)"
 
-        snap.flags["_pending"] = (
-            "ROE/ROA/영업이익률/부채비율/EV-EBITDA/FCF 등은 재무제표 페이지 연동 후 채워짐 (2차 작업)"
-        )
+        # ── "기업실적분석" 표에서 ROE/영업이익률/순이익률/부채비율 파싱 ──
+        # 이 표는 pandas.read_html로 바로 DataFrame화 가능한 표준 HTML 테이블
+        try:
+            from io import StringIO
+            tables = pd.read_html(StringIO(resp.text))
+        except Exception:
+            tables = []
+
+        perf_table = None
+        for t in tables:
+            try:
+                first_col = t.iloc[:, 0].astype(str).tolist()
+            except Exception:
+                continue
+            if any("ROE" in str(x) for x in first_col) and any("부채비율" in str(x) for x in first_col):
+                perf_table = t
+                break
+
+        if perf_table is not None:
+            try:
+                # 컬럼 중 예측치(E)가 아닌 가장 최근 실적 컬럼을 선택
+                data_cols = [c for c in perf_table.columns if c != perf_table.columns[0]]
+                actual_cols = [c for c in data_cols if "(E)" not in str(c)]
+                target_col = actual_cols[-1] if actual_cols else (data_cols[-1] if data_cols else None)
+
+                def _row_value(label_keyword: str):
+                    row = perf_table[perf_table.iloc[:, 0].astype(str).str.contains(label_keyword, na=False)]
+                    if row.empty or target_col is None:
+                        return None
+                    return _parse_float(str(row.iloc[0][target_col]))
+
+                snap.roe = _row_value("ROE")
+                snap.roa = _row_value("ROA")
+                snap.operating_margin = _row_value("영업이익률")
+                snap.net_margin = _row_value("순이익률")
+                snap.debt_ratio = _row_value("부채비율")
+            except Exception:
+                pass  # 표 구조가 예상과 다르면 해당 필드는 N/A로 남김
+
+        pending_items = []
+        if snap.psr is None:
+            pending_items.append("PSR")
+        if snap.ev_ebitda is None:
+            pending_items.append("EV/EBITDA")
+        if snap.current_ratio is None:
+            pending_items.append("유동비율")
+        if snap.interest_coverage is None:
+            pending_items.append("이자보상배율")
+        if snap.fcf is None:
+            pending_items.append("FCF/FCF Yield")
+        if pending_items:
+            snap.flags["_pending"] = f"{', '.join(pending_items)} 등은 2차 작업(재무제표 상세) 이후 채워짐"
+
         return snap
 
     def get_quarterly_financials(self, entity: Entity, n_quarters: int = 8) -> List[QuarterlyFinancials]:
