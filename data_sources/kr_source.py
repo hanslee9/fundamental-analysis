@@ -84,6 +84,29 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         except Exception:
             return code
 
+    def _parse_market_cap_eok(self, soup) -> float:
+        """
+        네이버금융 시가총액은 "374조 5,633억원"처럼 조/억이 나뉘어 표시되는 경우가 많아
+        전체 텍스트에서 조/억 숫자를 각각 추출해 억원 단위로 환산 합산한다.
+        (1조 = 10,000억)
+        """
+        label = soup.find(string=re.compile("시가총액"))
+        if not label:
+            return None
+        parent = label.find_parent("tr")
+        if not parent:
+            return None
+        text = parent.get_text()
+
+        jo_match = re.search(r"([\d,]+)\s*조", text)
+        eok_match = re.search(r"조?\s*([\d,]+)\s*억", text)
+
+        jo_val = float(jo_match.group(1).replace(",", "")) if jo_match else 0
+        eok_val = float(eok_match.group(1).replace(",", "")) if eok_match else 0
+
+        total = jo_val * 10000 + eok_val
+        return total if total > 0 else None
+
     def get_valuation_snapshot(self, entity: Entity, as_of: str = None) -> ValuationSnapshot:
         snap = ValuationSnapshot(entity=entity, as_of=as_of or datetime.now().strftime("%Y-%m-%d"))
 
@@ -158,17 +181,9 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                 snap.net_margin = _row_value("순이익률")
                 snap.debt_ratio = _row_value("부채비율")
 
-                # PSR = 시가총액 / 매출액 (매출액은 억원 단위, 시가총액도 억원 단위로 맞춰 계산)
+                # PSR = 시가총액 / 매출액 (매출액은 억원 단위, 시가총액도 억원 단위로 환산해서 계산)
                 revenue = _row_value("매출액")
-                market_cap_label = soup.find(string=re.compile("시가총액"))
-                market_cap = None
-                if market_cap_label:
-                    mc_parent = market_cap_label.find_parent("tr")
-                    if mc_parent:
-                        mc_em = mc_parent.find("em")
-                        if mc_em:
-                            # "3,614,532" 형태(억원 단위, 콤마 포함) 파싱
-                            market_cap = _parse_float(mc_em.text)
+                market_cap = self._parse_market_cap_eok(soup)
                 if revenue and market_cap and revenue != 0:
                     snap.psr = round(market_cap / revenue, 2)
             except Exception:
