@@ -77,7 +77,7 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         try:
             url = f"https://finance.naver.com/item/main.naver?code={code}"
             resp = requests.get(url, headers=HEADERS, timeout=5)
-            resp.encoding = "euc-kr"
+            resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
             title = soup.select_one(".wrap_company h2 a")
             return title.text.strip() if title else code
@@ -90,7 +90,7 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         try:
             url = f"https://finance.naver.com/item/main.naver?code={entity.code}"
             resp = requests.get(url, headers=HEADERS, timeout=5)
-            resp.encoding = "euc-kr"
+            resp.encoding = "utf-8"
             soup = BeautifulSoup(resp.text, "html.parser")
         except Exception as e:
             snap.flags["_source"] = f"N/A(네트워크 오류: {e})"
