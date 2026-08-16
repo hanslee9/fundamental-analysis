@@ -19,10 +19,41 @@ st.set_page_config(page_title="종목(지수) 펀더멘털 분석/비교", layou
 
 def render_title():
     st.markdown(
-        "<h1 style='font-size:1.6rem; font-weight:700; margin-bottom:0.4rem;'>"
+        "<h1 style='font-size:1.4rem; font-weight:700; margin-bottom:0.3rem;'>"
         "종목(지수) 펀더멘털 분석/비교</h1>",
         unsafe_allow_html=True,
     )
+
+
+def render_section_header(text: str):
+    """중제목(주제목보다 작게)"""
+    st.markdown(
+        f"<h2 style='font-size:1.05rem; font-weight:700; margin:0.8rem 0 0.3rem 0;'>{text}</h2>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_subsection_header(text: str):
+    """소제목(중제목보다 더 작게)"""
+    st.markdown(
+        f"<h3 style='font-size:0.92rem; font-weight:700; margin:0.6rem 0 0.2rem 0;'>{text}</h3>",
+        unsafe_allow_html=True,
+    )
+
+
+# 전반적인 폰트 크기 축소 (표/메트릭/본문 텍스트)
+st.markdown(
+    """
+    <style>
+        .block-container { font-size: 0.92rem; }
+        div[data-testid="stMetricValue"] { font-size: 1.05rem !important; }
+        div[data-testid="stMetricLabel"] { font-size: 0.75rem !important; }
+        .stCaption, [data-testid="stCaptionContainer"] { font-size: 0.78rem !important; }
+        div[data-testid="stDataFrame"] { font-size: 0.85rem !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 render_title()
@@ -89,7 +120,7 @@ if mode == "N=1 단일 종목":
     entity = name_options[selected_label]
 
     st.divider()
-    st.subheader(f"{entity.name} ({entity.code}) — 정적 분석")
+    render_section_header(f"{entity.name} ({entity.code}) — 정적 분석")
 
     with st.spinner("지표 조회 중..."):
         try:
@@ -115,7 +146,7 @@ if mode == "N=1 단일 종목":
     st.divider()
 
     # ── §3 벤치마크 3단 구조 (정적) — 목업 ──────────────────
-    st.subheader("정적 벤치마크 비교 (종목 vs 섹터 vs 지수)")
+    render_section_header("정적 벤치마크 비교 (종목 vs 섹터 vs 지수)")
     st.caption("⚠ 샘플 데이터 — 실제 섹터/지수 연동 전 레이아웃 검증용")
     static_bench = mock.get_static_benchmark_table(entity.name)
     st.dataframe(pd.DataFrame(static_bench), use_container_width=True, hide_index=True)
@@ -123,7 +154,7 @@ if mode == "N=1 단일 종목":
     st.divider()
 
     # ── §3 벤치마크 3단 구조 (동적) — 목업 ──────────────────
-    st.subheader("동적 벤치마크 비교 (동일분기 YoY Rolling)")
+    render_section_header("동적 벤치마크 비교 (동일분기 YoY Rolling)")
     st.caption("⚠ 샘플 데이터 — 실제 섹터/지수 연동 전 레이아웃 검증용")
     dynamic_bench = mock.get_dynamic_benchmark_table(entity.name)
     st.dataframe(pd.DataFrame(dynamic_bench), use_container_width=True, hide_index=True)
@@ -131,12 +162,12 @@ if mode == "N=1 단일 종목":
     st.divider()
 
     # ── 가격 추이 (실데이터) ─────────────────────────────
-    st.subheader("가격 추이 (최근 12개월)")
+    render_section_header("가격 추이 (최근 12개월)")
     with st.spinner("가격 데이터 조회 중..."):
         try:
             price = adapter.get_price_series(entity, months=12)
             if price.df is not None and not price.df.empty and "close" in price.df.columns:
-                st.line_chart(price.df["close"])
+                st.line_chart(price.df["close"].rename(entity.name))
             else:
                 st.info("가격 데이터가 없습니다.")
         except Exception as e:
@@ -145,7 +176,7 @@ if mode == "N=1 단일 종목":
     st.divider()
 
     # ── 분기 재무 시계열 (실데이터, 구현된 소스만) ────────
-    st.subheader("분기 재무 시계열 (실데이터, 구현된 시장만)")
+    render_section_header("분기 재무 시계열 (실데이터, 구현된 시장만)")
     try:
         financials = adapter.get_quarterly_financials(entity, n_quarters=8)
         if financials:
@@ -181,39 +212,45 @@ else:
         st.stop()
 
     name_a, name_b = entity_a.name, entity_b.name
-    market_label_a = "한국" if market_a == "KR" else "미국"
-    market_label_b = "한국" if market_b == "KR" else "미국"
-    st.subheader(f"{name_a} ({entity_a.code}, {market_label_a}) vs {name_b} ({entity_b.code}, {market_label_b})")
+    render_section_header(f"{name_a} ({entity_a.code}) vs {name_b} ({entity_b.code})")
 
-    # ── §6-1 정적 비교 테이블 (목업) ─────────────────────
-    st.markdown("#### 정적 비교")
+    # ── §6-1 정적 지표 비교 (17개 지표, 목업) ─────────────
+    render_subsection_header("정적 지표 비교")
     st.caption("⚠ 샘플 데이터")
     static_df = pd.DataFrame(mock.get_n2_static_table(name_a, name_b))
     st.dataframe(static_df, use_container_width=True, hide_index=True)
 
     st.divider()
 
-    # ── §6-2 동적 비교 테이블 (YoY Rolling + Gap, 목업) ────
-    st.markdown("#### 동적 비교 (동일분기 YoY Rolling + Gap)")
-    st.caption("⚠ 샘플 데이터 — Gap 컬럼으로 격차 확대/축소 시점 확인")
-    dynamic_df = pd.DataFrame(mock.get_n2_dynamic_table(name_a, name_b))
-    st.dataframe(dynamic_df, use_container_width=True, hide_index=True)
-    gap_col = [c for c in dynamic_df.columns if c.startswith("Gap")][0]
-    gap_numeric = dynamic_df[gap_col].str.replace("%p", "").str.replace("+", "").astype(float)
-    st.line_chart(gap_numeric.rename("Gap(A-B, %p)"))
+    # ── §6-2 동적 비교: PER 시계열 (표 → 그래프 순서, 목업) ──
+    render_subsection_header("동적 비교 (PER 시계열)")
+    st.caption("⚠ 샘플 데이터")
+    per_quarters, a_per, b_per = mock.generate_per_trend()
+    per_trend_df = pd.DataFrame(mock.get_n2_per_trend_table(name_a, name_b, per_quarters, a_per, b_per))
+    st.dataframe(per_trend_df, use_container_width=True, hide_index=True)
+
+    # 표 아래에 그래프 배치: A/B PER을 서로 다른 색 선으로 표시
+    chart_df = pd.DataFrame({
+        f"{name_a} PER": a_per,
+        f"{name_b} PER": b_per,
+    })
+    chart_df.index = per_quarters
+    st.line_chart(chart_df)
+    st.caption(f"**{name_a} PER / {name_b} PER**: 분기별 PER(배) 추이 비교")
 
     st.divider()
 
     # ── §6-3 PER 프리미엄 — 시계열 동행성 (목업) ──────────
-    st.markdown("#### 멀티플(PER) 프리미엄 — 시계열 동행성 참고")
+    render_subsection_header("멀티플(PER) 프리미엄 — 시계열 동행성 참고")
     st.caption("⚠ 샘플 데이터 — 인과관계 단정 아님, 동행/디커플링 관찰용")
-    per_df = pd.DataFrame(mock.get_n2_per_premium_table(name_a, name_b))
+    earn_quarters, a_yoy, b_yoy = mock.generate_earnings_yoy()
+    per_df = pd.DataFrame(mock.get_n2_per_premium_table(name_a, name_b, earn_quarters, a_yoy, b_yoy))
     st.dataframe(per_df, use_container_width=True, hide_index=True)
 
     st.divider()
 
     # ── §6-4 종합 판정 (목업) ─────────────────────────────
-    st.markdown("#### 종합 판정 — 투자판단 참고 프레임")
+    render_subsection_header("종합 판정 — 투자판단 참고 프레임")
     st.caption("⚠ 샘플 데이터 — 추천이 아닌 판단재료 제공 목적")
 
     st.markdown("**1. 포지션 유형 분류**")
