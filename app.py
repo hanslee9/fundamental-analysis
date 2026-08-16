@@ -19,17 +19,38 @@ from data_sources.schema import EntityType, Market
 st.set_page_config(page_title="종목(지수) 펀더멘털 분석/비교", layout="wide")
 
 
+def render_title():
+    """제목을 기본 st.title 대비 약 70% 크기로 표시"""
+    st.markdown(
+        "<h1 style='font-size:1.6rem; font-weight:700; margin-bottom:0.4rem;'>"
+        "종목(지수) 펀더멘털 분석/비교</h1>",
+        unsafe_allow_html=True,
+    )
+
+
 # ── 비밀번호 게이트 ──────────────────────────────────────────
 # 비밀번호는 코드에 직접 넣지 않고 SL Cloud의 Secrets에 저장한 값을 사용.
 # (SL Cloud 배포 후 Settings → Secrets 에 아래 형식으로 등록)
 #   password = "여기에_원하는_비밀번호"
+#   owner_key = "본인만 아는_긴_임의문자열"   ← 선택사항, 아래 설명 참고
+#
+# owner_key를 설정해두면 아래 형식의 URL로 접속 시 비밀번호 입력 없이 바로 통과됩니다.
+#   https://<앱주소>.streamlit.app/?key=본인만_아는_긴_임의문자열
+# 이 링크를 본인 브라우저 즐겨찾기에 등록해두면 사실상 비밀번호를 매번 칠 필요가 없습니다.
+# (Streamlit Cloud 무료 환경은 "소유자 자동 인식" 기능이 없어 이 방식으로 대체합니다)
 #
 # 나중에 비밀번호 기능을 없애고 싶으면 이 블록 전체를 삭제하면 됩니다.
 def check_password() -> bool:
     if st.session_state.get("authenticated", False):
         return True
 
-    st.title("종목(지수) 펀더멘털 분석/비교")
+    # URL의 ?key=... 값이 owner_key와 일치하면 비밀번호 입력 없이 통과
+    owner_key = st.secrets.get("owner_key", None)
+    if owner_key and st.query_params.get("key") == owner_key:
+        st.session_state.authenticated = True
+        return True
+
+    render_title()
     pw_input = st.text_input("비밀번호를 입력하세요", type="password")
 
     if pw_input:
@@ -50,7 +71,7 @@ if not check_password():
 # ── 비밀번호 게이트 끝 ────────────────────────────────────────
 
 
-st.title("종목(지수) 펀더멘털 분석/비교")
+render_title()
 st.caption("N=1 단일 종목 조회 — 1차 버전 (섹터·지수 벤치마크는 추후 추가)")
 
 # ── 사이드바: 시장 선택 & 검색 ──────────────────────────────

@@ -30,6 +30,27 @@ def _latest_business_day() -> str:
     return d.strftime("%Y%m%d")
 
 
+def _get_ticker_list_with_fallback(mkt: str, max_tries: int = 10) -> List[str]:
+    """
+    특정 날짜에 pykrx가 빈 데이터/에러를 반환하는 경우(휴장일, 데이터 지연 등)를 대비해
+    최대 max_tries 영업일 전까지 거슬러 올라가며 유효한 종목 리스트를 찾는다.
+    """
+    d = datetime.now()
+    tried = 0
+    while tried < max_tries:
+        if d.weekday() < 5:  # 평일만 시도
+            date_str = d.strftime("%Y%m%d")
+            try:
+                tickers = pykrx_stock.get_market_ticker_list(date=date_str, market=mkt)
+                if tickers:
+                    return tickers
+            except Exception:
+                pass
+            tried += 1
+        d -= timedelta(days=1)
+    return []
+
+
 class KrFreeSourceAdapter(DataSourceAdapter):
     name = "kr_free"
     supported_markets = [Market.KR]
@@ -38,13 +59,9 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         if pykrx_stock is None:
             raise RuntimeError("pykrx가 설치되어 있지 않습니다.")
 
-        # 주말/휴장일에는 '오늘' 기준 조회 시 데이터가 비어 에러가 나므로
-        # 반드시 최근 영업일(YYYYMMDD)을 명시해서 조회한다.
-        as_of = _latest_business_day()
-
         results = []
         for mkt in ["KOSPI", "KOSDAQ"]:
-            tickers = pykrx_stock.get_market_ticker_list(date=as_of, market=mkt)
+            tickers = _get_ticker_list_with_fallback(mkt)
             for t in tickers:
                 try:
                     nm = pykrx_stock.get_market_ticker_name(t)
@@ -66,11 +83,35 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         if pykrx_stock is None:
             raise RuntimeError("pykrx가 설치되어 있지 않습니다.")
 
-        date_str = as_of.replace("-", "") if as_of else _latest_business_day()
-        df = pykrx_stock.get_market_fundamental(date_str, date_str, entity.code)
+        snap = ValuationSnapshot(entity=entity, as_of=as_of or "latest")
 
-        snap = ValuationSnapshot(entity=entity, as_of=date_str)
-        if df is None or df.empty:
+        if as_of:
+            dates_to_try = [as_of.replace("-", "")]
+        else:
+            # 최근 영업일부터 최대 10일 전까지 유효한 데이터가 나올 때까지 시도
+            d = datetime.now()
+            dates_to_try = []
+            tried = 0
+            while tried < 10:
+                if d.weekday() < 5:
+                    dates_to_try.append(d.strftime("%Y%m%d"))
+                    tried += 1
+                d -= timedelta(days=1)
+
+        df = None
+        used_date = None
+        for date_str in dates_to_try:
+            try:
+                candidate = pykrx_stock.get_market_fundamental(date_str, date_str, entity.code)
+            except Exception:
+                continue
+            if candidate is not None and not candidate.empty:
+                df = candidate
+                used_date = date_str
+                break
+
+        snap.as_of = used_date or (dates_to_try[0] if dates_to_try else "N/A")
+        if df is None:
             snap.flags["_source"] = "N/A(데이터 없음)"
             return snap
 
