@@ -131,23 +131,19 @@ if mode == "N=1 단일 종목":
 
     if snap:
         metric_rows = [
-            ("PER", snap.per), ("PBR", snap.pbr), ("PSR", snap.psr), ("EV/EBITDA", snap.ev_ebitda),
-            ("배당수익률(%)", snap.dividend_yield), ("ROE(%)", snap.roe), ("ROA(%)", snap.roa),
+            ("PER", snap.per), ("PBR", snap.pbr), ("PSR", snap.psr),
+            ("배당수익률(%)", snap.dividend_yield), ("ROE(%)", snap.roe),
             ("영업이익률(%)", snap.operating_margin), ("순이익률(%)", snap.net_margin),
-            ("부채비율", snap.debt_ratio), ("유동비율", snap.current_ratio),
-            ("이자보상배율", snap.interest_coverage),
+            ("부채비율", snap.debt_ratio), ("유보율(%)", snap.retention_ratio),
             ("매출YoY(%)", snap.revenue_yoy), ("영업이익YoY(%)", snap.operating_income_yoy),
             ("EPS YoY(%)", snap.eps_yoy),
-            ("FCF(억원)", snap.fcf), ("FCF Yield(%)", snap.fcf_yield),
         ]
-        cols = st.columns(5)
+        cols = st.columns(4)
         for i, (label, value) in enumerate(metric_rows):
-            with cols[i % 5]:
+            with cols[i % 4]:
                 st.metric(label, f"{value:.2f}" if value is not None else "N/A")
         if snap.flags.get("_pending"):
             st.caption(f"⚠ {snap.flags['_pending']}")
-        if snap.flags.get("ratio_debug"):
-            st.caption(f"🔍 유동비율/이자보상배율 디버그: {snap.flags['ratio_debug']}")
 
     st.divider()
 
@@ -156,13 +152,11 @@ if mode == "N=1 단일 종목":
     st.caption("⚠ 종목값은 위와 동일한 실데이터입니다. 섹터평균/지수평균만 샘플 데이터입니다.")
     if snap:
         real_values = {
-            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr, "EV/EBITDA": snap.ev_ebitda,
-            "배당수익률": snap.dividend_yield, "ROE": snap.roe, "ROA": snap.roa,
+            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr,
+            "배당수익률": snap.dividend_yield, "ROE": snap.roe,
             "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
-            "부채비율": snap.debt_ratio, "유동비율": snap.current_ratio,
-            "이자보상배율": snap.interest_coverage,
+            "부채비율": snap.debt_ratio, "유보율": snap.retention_ratio,
             "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
-            "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
         }
         static_bench = mock.get_static_benchmark_table(entity.name, real_values)
         st.dataframe(pd.DataFrame(static_bench), use_container_width=True, hide_index=True)
@@ -249,13 +243,11 @@ else:
         if snap is None:
             return {k: None for _, k, _ in mock.METRIC_SCHEMA}
         return {
-            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr, "EV/EBITDA": snap.ev_ebitda,
-            "배당수익률": snap.dividend_yield, "ROE": snap.roe, "ROA": snap.roa,
+            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr,
+            "배당수익률": snap.dividend_yield, "ROE": snap.roe,
             "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
-            "부채비율": snap.debt_ratio, "유동비율": snap.current_ratio,
-            "이자보상배율": snap.interest_coverage,
+            "부채비율": snap.debt_ratio, "유보율": snap.retention_ratio,
             "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
-            "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
         }
 
     # ── §6-1 정적 지표 비교 (17개 지표, 실데이터) ─────────
