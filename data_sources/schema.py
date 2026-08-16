@@ -64,6 +64,11 @@ class ValuationSnapshot:
     fcf: Optional[float] = None
     fcf_yield: Optional[float] = None
 
+    # 성장성 (연간 기준 YoY, §8-1)
+    revenue_yoy: Optional[float] = None
+    operating_income_yoy: Optional[float] = None
+    eps_yoy: Optional[float] = None
+
     # 결측/이상치 플래그 (§8-7) — 키: 지표명, 값: "N/A(적자)" 등 라벨
     flags: dict = field(default_factory=dict)
 
