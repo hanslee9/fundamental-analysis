@@ -17,8 +17,34 @@ report_mock.py — 리포트 출력 형식(§3/§5/§6) 검증용 목업 데이�
 
 import random
 
-# ── 공통 지표 스키마 (§8-1, 데이터 소스 제약 반영 12개로 조정) ──
-METRIC_SCHEMA = [
+# ── 전체 지표 스키마 (§8-1, 17개) — N=1 단일 종목 분석에 사용 ──
+# 시장별로 확보 가능한 지표가 달라 값이 없으면 N/A로 표시됨.
+FULL_METRIC_SCHEMA = [
+    ("밸류에이션", "PER", "배"),
+    ("밸류에이션", "PBR", "배"),
+    ("밸류에이션", "PSR", "배"),
+    ("밸류에이션", "EV/EBITDA", "배"),
+    ("밸류에이션", "배당수익률", "%"),
+    ("수익성", "ROE", "%"),
+    ("수익성", "ROA", "%"),
+    ("수익성", "영업이익률", "%"),
+    ("수익성", "순이익률", "%"),
+    ("건전성", "부채비율", "%"),
+    ("건전성", "유보율", "%"),
+    ("건전성", "유동비율", "%"),
+    ("건전성", "이자보상배율", "배"),
+    ("성장성", "매출YoY", "%"),
+    ("성장성", "영업이익YoY", "%"),
+    ("성장성", "EPS YoY", "%"),
+    ("현금흐름", "FCF", ""),
+    ("현금흐름", "FCF Yield", "%"),
+]
+
+# ── 공통 지표 스키마 (한국·미국 양쪽 다 실데이터 가능한 11개) — N=2 비교에 사용 ──
+# ROA, EV/EBITDA, 유동비율, 이자보상배율, FCF, FCF Yield, 유보율은
+# 한쪽 시장에서만 확보 가능해 N=2 크로스마켓 비교 공정성을 위해 제외.
+# (더 좋은 데이터 소스를 찾으면 추후 전체 지표로 확장 예정)
+COMMON_METRIC_SCHEMA = [
     ("밸류에이션", "PER", "배"),
     ("밸류에이션", "PBR", "배"),
     ("밸류에이션", "PSR", "배"),
@@ -27,11 +53,24 @@ METRIC_SCHEMA = [
     ("수익성", "영업이익률", "%"),
     ("수익성", "순이익률", "%"),
     ("건전성", "부채비율", "%"),
-    ("건전성", "유보율", "%"),
     ("성장성", "매출YoY", "%"),
     ("성장성", "영업이익YoY", "%"),
     ("성장성", "EPS YoY", "%"),
 ]
+
+# 이전 버전과의 호환을 위한 별칭 (다른 코드에서 METRIC_SCHEMA를 참조하는 경우 대비)
+METRIC_SCHEMA = COMMON_METRIC_SCHEMA
+
+
+def fmt_num(value, unit: str = "") -> str:
+    """
+    지표 값 표기 공통 규칙:
+      - None → "N/A" (단위 없음)
+      - 그 외 → 소수점 2자리 + 천단위 콤마 + 단위(%,배 등) 접미사
+    """
+    if value is None:
+        return "N/A"
+    return f"{value:,.2f}{unit}"
 
 
 
@@ -44,34 +83,26 @@ def get_static_benchmark_table(entity_name: str, real_values: dict) -> list[dict
 
     real_values: {"PER": 14.4, "PBR": 12.6, ...} 형태. 값이 없는 지표는 None으로 전달하면 N/A 처리.
     위쪽 "정적 분석" 카드와 반드시 같은 종목값을 써야 두 표가 일관됨 — 절대 여기서 새로 난수 생성하지 않음.
+    17개 지표 전체 사용 (N=1은 단일 종목이라 시장별로 없는 값만 N/A 처리).
     """
     result = []
-    for category, name, unit in METRIC_SCHEMA:
+    for category, name, unit in FULL_METRIC_SCHEMA:
         val = real_values.get(name)
         if val is None:
-            result.append({
-                "카테고리": category,
-                "지표": name,
-                f"{entity_name}": "N/A",
-                "섹터평균": "N/A",
-                "지수평균": "N/A",
-                "괴리율(vs섹터)": "N/A",
-                "괴리율(vs지수)": "N/A",
-            })
-            continue
+            continue  # 결측치 지표는 표에서 생략
         # 섹터/지수 평균은 아직 실제 데이터가 없어 샘플로 생성 (TODO 대상)
-        sector = round(val * random.uniform(0.8, 1.2), 1)
-        index = round(val * random.uniform(0.7, 1.3), 1)
-        gap_sector = round((val - sector) / sector * 100, 1) if sector else 0
-        gap_index = round((val - index) / index * 100, 1) if index else 0
+        sector = val * random.uniform(0.8, 1.2)
+        index = val * random.uniform(0.7, 1.3)
+        gap_sector = (val - sector) / sector * 100 if sector else 0
+        gap_index = (val - index) / index * 100 if index else 0
         result.append({
             "카테고리": category,
             "지표": name,
-            f"{entity_name}": f"{val}{unit}",
-            "섹터평균": f"{sector}{unit}(샘플)",
-            "지수평균": f"{index}{unit}(샘플)",
-            "괴리율(vs섹터)": f"{gap_sector:+.1f}%",
-            "괴리율(vs지수)": f"{gap_index:+.1f}%",
+            f"{entity_name}": fmt_num(val, unit),
+            "섹터평균": fmt_num(sector, unit) + "(샘플)",
+            "지수평균": fmt_num(index, unit) + "(샘플)",
+            "괴리율(vs섹터)": f"{gap_sector:+,.2f}%",
+            "괴리율(vs지수)": f"{gap_index:+,.2f}%",
         })
     return result
 
@@ -91,39 +122,42 @@ def get_dynamic_benchmark_table(entity_name: str, n_quarters: int = 8) -> list[d
         rel_strength = round(entity_yoy - sector_yoy, 1)
         result.append({
             "분기": q,
-            f"{entity_name} 영업이익YoY": f"{entity_yoy:+.1f}%",
-            "섹터 영업이익YoY": f"{sector_yoy:+.1f}%",
-            "지수 영업이익YoY": f"{index_yoy:+.1f}%",
-            "상대강도(vs섹터)": f"{rel_strength:+.1f}%p",
+            f"{entity_name} 영업이익YoY": f"{entity_yoy:+,.2f}%",
+            "섹터 영업이익YoY": f"{sector_yoy:+,.2f}%",
+            "지수 영업이익YoY": f"{index_yoy:+,.2f}%",
+            "상대강도(vs섹터)": f"{rel_strength:+,.2f}%p",
         })
     return result
 
 
-# ── N=2 §6-1 정적 비교 테이블 (17개 지표 전체, 실데이터 사용) ────
+# ── N=2 §6-1 정적 비교 테이블 (한국·미국 공통 11개 지표, 실데이터 사용) ──
 def get_n2_static_table(name_a: str, name_b: str, real_values_a: dict, real_values_b: dict) -> list[dict]:
-    """A/B 모두 실제 스냅샷 값을 전달받아 사용. 여기서 새로 난수 생성하지 않음."""
+    """
+    A/B 모두 실제 스냅샷 값을 전달받아 사용. 여기서 새로 난수 생성하지 않음.
+    양쪽 시장이 공통으로 실데이터를 확보한 11개 지표만 비교 (COMMON_METRIC_SCHEMA).
+    """
     result = []
-    for category, name, unit in METRIC_SCHEMA:
+    for category, name, unit in COMMON_METRIC_SCHEMA:
         a_val = real_values_a.get(name)
         b_val = real_values_b.get(name)
         if a_val is None or b_val is None:
             result.append({
-                "카테고리": category, "지표": f"{name}({unit})",
-                f"{name_a}": "N/A" if a_val is None else a_val,
-                f"{name_b}": "N/A" if b_val is None else b_val,
+                "카테고리": category, "지표": name,
+                f"{name_a}": fmt_num(a_val, unit),
+                f"{name_b}": fmt_num(b_val, unit),
                 "차이(A-B)": "N/A", "배수(A/B)": "N/A", "우위": "N/A",
             })
             continue
-        diff = round(a_val - b_val, 1)
-        ratio = round(a_val / b_val, 2) if b_val else None
+        diff = a_val - b_val
+        ratio = a_val / b_val if b_val else None
         winner = name_a if a_val > b_val else name_b
         result.append({
             "카테고리": category,
-            "지표": f"{name}({unit})",
-            f"{name_a}": a_val,
-            f"{name_b}": b_val,
-            "차이(A-B)": f"{diff:+.1f}",
-            "배수(A/B)": ratio,
+            "지표": name,
+            f"{name_a}": fmt_num(a_val, unit),
+            f"{name_b}": fmt_num(b_val, unit),
+            "차이(A-B)": f"{diff:+,.2f}",
+            "배수(A/B)": f"{ratio:,.2f}" if ratio is not None else "N/A",
             "우위": winner,
         })
     return result
@@ -153,7 +187,7 @@ def get_n2_per_trend_table(name_a: str, name_b: str, quarters, a_per, b_per) -> 
             "분기": q,
             f"{name_a} PER(배)": a,
             f"{name_b} PER(배)": b,
-            "Gap(A-B, 배)": f"{gap:+.1f}",
+            "Gap(A-B, 배)": f"{gap:+,.2f}",
         })
     return result
 
@@ -182,9 +216,9 @@ def get_n2_per_premium_table(name_a: str, name_b: str, quarters, a_yoy, b_yoy) -
         result.append({
             "분기": q,
             f"{name_a} PER밴드": a_band,
-            f"{name_a} 영업이익YoY": f"{a:+.1f}%",
+            f"{name_a} 영업이익YoY": f"{a:+,.2f}%",
             f"{name_b} PER밴드": b_band,
-            f"{name_b} 영업이익YoY": f"{b:+.1f}%",
+            f"{name_b} 영업이익YoY": f"{b:+,.2f}%",
             "비고(동행성)": note,
         })
     return result

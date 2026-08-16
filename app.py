@@ -41,6 +41,39 @@ def render_subsection_header(text: str):
     )
 
 
+def render_metric_card(label: str, value, unit: str = ""):
+    """
+    지표 카드 렌더러 (st.metric 대체).
+    - 값이 None이면 'N/A' (단위 표기 없음)
+    - 그 외에는 소수점 2자리 + 천단위 콤마 + 단위(%,배 등) 접미사
+    - 음수는 빨간색으로 표시
+    """
+    if value is None:
+        display = "N/A"
+        color = "inherit"
+    else:
+        display = f"{value:,.2f}{unit}"
+        color = "#d32f2f" if value < 0 else "inherit"
+    st.markdown(
+        f"""
+        <div style='padding:0.35rem 0;'>
+            <div style='font-size:0.75rem;color:#6b7280;'>{label}</div>
+            <div style='font-size:1.05rem;font-weight:600;color:{color};'>{display}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def style_negative_red(df: pd.DataFrame):
+    """표 안의 문자열 값이 '-'로 시작하면 빨간색으로 표시하는 Styler 반환"""
+    def _color(val):
+        if isinstance(val, str) and val.strip().startswith("-"):
+            return "color: #d32f2f"
+        return ""
+    return df.style.applymap(_color)
+
+
 # 전반적인 폰트 크기 축소 (표/메트릭/본문 텍스트)
 st.markdown(
     """
@@ -131,17 +164,20 @@ if mode == "N=1 단일 종목":
 
     if snap:
         metric_rows = [
-            ("PER", snap.per), ("PBR", snap.pbr), ("PSR", snap.psr),
-            ("배당수익률(%)", snap.dividend_yield), ("ROE(%)", snap.roe),
-            ("영업이익률(%)", snap.operating_margin), ("순이익률(%)", snap.net_margin),
-            ("부채비율", snap.debt_ratio), ("유보율(%)", snap.retention_ratio),
-            ("매출YoY(%)", snap.revenue_yoy), ("영업이익YoY(%)", snap.operating_income_yoy),
-            ("EPS YoY(%)", snap.eps_yoy),
+            ("PER", snap.per, "배"), ("PBR", snap.pbr, "배"), ("PSR", snap.psr, "배"),
+            ("EV/EBITDA", snap.ev_ebitda, "배"),
+            ("배당수익률", snap.dividend_yield, "%"), ("ROE", snap.roe, "%"), ("ROA", snap.roa, "%"),
+            ("영업이익률", snap.operating_margin, "%"), ("순이익률", snap.net_margin, "%"),
+            ("부채비율", snap.debt_ratio, "%"), ("유보율", snap.retention_ratio, "%"),
+            ("유동비율", snap.current_ratio, "%"), ("이자보상배율", snap.interest_coverage, "배"),
+            ("매출YoY", snap.revenue_yoy, "%"), ("영업이익YoY", snap.operating_income_yoy, "%"),
+            ("EPS YoY", snap.eps_yoy, "%"),
+            ("FCF", snap.fcf, ""), ("FCF Yield", snap.fcf_yield, "%"),
         ]
-        cols = st.columns(4)
-        for i, (label, value) in enumerate(metric_rows):
-            with cols[i % 4]:
-                st.metric(label, f"{value:.2f}" if value is not None else "N/A")
+        cols = st.columns(5)
+        for i, (label, value, unit) in enumerate(metric_rows):
+            with cols[i % 5]:
+                render_metric_card(label, value, unit)
         if snap.flags.get("_pending"):
             st.caption(f"⚠ {snap.flags['_pending']}")
 
@@ -152,14 +188,16 @@ if mode == "N=1 단일 종목":
     st.caption("⚠ 종목값은 위와 동일한 실데이터입니다. 섹터평균/지수평균만 샘플 데이터입니다.")
     if snap:
         real_values = {
-            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr,
-            "배당수익률": snap.dividend_yield, "ROE": snap.roe,
+            "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr, "EV/EBITDA": snap.ev_ebitda,
+            "배당수익률": snap.dividend_yield, "ROE": snap.roe, "ROA": snap.roa,
             "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
             "부채비율": snap.debt_ratio, "유보율": snap.retention_ratio,
+            "유동비율": snap.current_ratio, "이자보상배율": snap.interest_coverage,
             "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
+            "FCF": snap.fcf, "FCF Yield": snap.fcf_yield,
         }
         static_bench = mock.get_static_benchmark_table(entity.name, real_values)
-        st.dataframe(pd.DataFrame(static_bench), use_container_width=True, hide_index=True)
+        st.dataframe(style_negative_red(pd.DataFrame(static_bench)), use_container_width=True, hide_index=True)
     else:
         st.info("종목 지표 조회에 실패하여 벤치마크 비교를 표시할 수 없습니다.")
 
@@ -169,7 +207,7 @@ if mode == "N=1 단일 종목":
     render_section_header("동적 벤치마크 비교 (동일분기 YoY Rolling)")
     st.caption("⚠ 샘플 데이터 — 실제 섹터/지수 연동 전 레이아웃 검증용")
     dynamic_bench = mock.get_dynamic_benchmark_table(entity.name)
-    st.dataframe(pd.DataFrame(dynamic_bench), use_container_width=True, hide_index=True)
+    st.dataframe(style_negative_red(pd.DataFrame(dynamic_bench)), use_container_width=True, hide_index=True)
 
     st.divider()
 
@@ -241,20 +279,20 @@ else:
 
     def _snap_to_dict(snap):
         if snap is None:
-            return {k: None for _, k, _ in mock.METRIC_SCHEMA}
+            return {k: None for _, k, _ in mock.COMMON_METRIC_SCHEMA}
         return {
             "PER": snap.per, "PBR": snap.pbr, "PSR": snap.psr,
             "배당수익률": snap.dividend_yield, "ROE": snap.roe,
             "영업이익률": snap.operating_margin, "순이익률": snap.net_margin,
-            "부채비율": snap.debt_ratio, "유보율": snap.retention_ratio,
+            "부채비율": snap.debt_ratio,
             "매출YoY": snap.revenue_yoy, "영업이익YoY": snap.operating_income_yoy, "EPS YoY": snap.eps_yoy,
         }
 
-    # ── §6-1 정적 지표 비교 (17개 지표, 실데이터) ─────────
+    # ── §6-1 정적 지표 비교 (한국·미국 공통 11개 지표, 실데이터) ──
     render_subsection_header("정적 지표 비교")
-    st.caption("⚠ 실데이터 (섹터/지수 벤치마크는 미포함)")
+    st.caption("⚠ 실데이터 (한국·미국 공통 지표만 비교, 섹터/지수 벤치마크는 미포함)")
     static_df = pd.DataFrame(mock.get_n2_static_table(name_a, name_b, _snap_to_dict(snap_a), _snap_to_dict(snap_b)))
-    st.dataframe(static_df, use_container_width=True, hide_index=True)
+    st.dataframe(style_negative_red(static_df), use_container_width=True, hide_index=True)
 
     st.divider()
 
@@ -263,7 +301,7 @@ else:
     st.caption("⚠ 샘플 데이터")
     per_quarters, a_per, b_per = mock.generate_per_trend()
     per_trend_df = pd.DataFrame(mock.get_n2_per_trend_table(name_a, name_b, per_quarters, a_per, b_per))
-    st.dataframe(per_trend_df, use_container_width=True, hide_index=True)
+    st.dataframe(style_negative_red(per_trend_df), use_container_width=True, hide_index=True)
 
     # 표 아래에 그래프 배치: A/B PER을 서로 다른 색 선으로 표시
     chart_df = pd.DataFrame({
@@ -281,7 +319,7 @@ else:
     st.caption("⚠ 샘플 데이터 — 인과관계 단정 아님, 동행/디커플링 관찰용")
     earn_quarters, a_yoy, b_yoy = mock.generate_earnings_yoy()
     per_df = pd.DataFrame(mock.get_n2_per_premium_table(name_a, name_b, earn_quarters, a_yoy, b_yoy))
-    st.dataframe(per_df, use_container_width=True, hide_index=True)
+    st.dataframe(style_negative_red(per_df), use_container_width=True, hide_index=True)
 
     st.divider()
 
