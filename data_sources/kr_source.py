@@ -47,21 +47,24 @@ class KrFreeSourceAdapter(DataSourceAdapter):
         지수 평균 PER/PBR/배당수익률 조회 (§3 벤치마크용).
         index_name: "코스피" 또는 "코스닥"
         휴장일 등으로 특정 날짜에 데이터가 없으면 최대 max_tries 영업일 전까지 재시도.
-        반환: {"PER": .., "PBR": .., "배당수익률": ..} (실패 시 각 값 None)
+        반환: {"PER": .., "PBR": .., "배당수익률": .., "_debug": "..."} (실패 시 각 값 None)
         """
-        result = {"PER": None, "PBR": None, "배당수익률": None}
+        result = {"PER": None, "PBR": None, "배당수익률": None, "_debug": ""}
         if pykrx_stock is None:
+            result["_debug"] = "pykrx 미설치"
             return result
 
         d = datetime.now()
         tried = 0
+        last_error = None
         while tried < max_tries:
             if d.weekday() < 5:
                 date_str = d.strftime("%Y%m%d")
                 try:
                     df = pykrx_stock.get_index_fundamental(date_str, date_str, index_name)
-                except Exception:
+                except Exception as e:
                     df = None
+                    last_error = f"{date_str}: {e}"
                 if df is not None and not df.empty:
                     row = df.iloc[-1]
                     per = row.get("PER")
@@ -73,10 +76,12 @@ class KrFreeSourceAdapter(DataSourceAdapter):
                         result["PBR"] = float(pbr)
                     if div is not None and div == div:
                         result["배당수익률"] = float(div)
-                    if any(v is not None for v in result.values()):
+                    if any(v is not None for v in [result["PER"], result["PBR"], result["배당수익률"]]):
+                        result["_debug"] = f"성공 ({date_str})"
                         return result
                 tried += 1
             d -= timedelta(days=1)
+        result["_debug"] = f"{max_tries}회 시도 모두 실패 (마지막 에러: {last_error})"
         return result
 
     def search_entity(self, query: str, market: str = "KR") -> List[Entity]:
