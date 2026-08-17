@@ -206,16 +206,21 @@ if mode == "N=1 단일 종목":
 
         # 한국 종목은 코스피 지수 평균(PER/PBR/배당수익률) 실데이터 조회
         real_index_values = {}
+        index_debug = None
         if market == "KR" and hasattr(adapter, "get_index_average"):
             with st.spinner("코스피 지수 평균 조회 중..."):
                 try:
-                    real_index_values = adapter.get_index_average("코스피")
-                    real_index_values = {k: v for k, v in real_index_values.items() if v is not None}
-                except Exception:
+                    raw = adapter.get_index_average("코스피")
+                    index_debug = raw.pop("_debug", None)
+                    real_index_values = {k: v for k, v in raw.items() if v is not None}
+                except Exception as e:
+                    index_debug = f"예외 발생: {e}"
                     real_index_values = {}
 
         static_bench = mock.get_static_benchmark_table(entity.name, real_values, real_index_values)
         st.dataframe(style_negative_red(pd.DataFrame(static_bench)), use_container_width=True, hide_index=True)
+        if index_debug:
+            st.caption(f"🔍 코스피 지수평균 디버그: {index_debug}")
     else:
         st.info("종목 지표 조회에 실패하여 벤치마크 비교를 표시할 수 없습니다.")
 
